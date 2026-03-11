@@ -1,0 +1,200 @@
+{
+  "stories": [
+    {
+      "id": "knight",
+      "title": "Knight's Quest",
+      "subtitle": "10 scenes • Adventure",
+      "poster": "/images/output (1).png",
+      "slides": [
+        {
+          "id": "scene-01",
+          "title": "Scene 1",
+          "subtitle": "The Ancient Castle at Dawn",
+          "body": "A majestic fortress rises above the morning mist, its stone towers reaching toward the golden sky as a new quest begins.",
+          "image": "/images/output (1).png",
+          "prompt": "Animate it",
+          "cta": "Animate it"
+        },
+        {
+          "id": "scene-02",
+          "title": "Scene 2",
+          "subtitle": "The Knight's Departure",
+          "body": "Clad in gleaming armor, the brave knight stands ready at the castle gates, determined to face whatever dangers lie ahead on his journey.",
+          "image": "/images/output (2).png",
+          "prompt": "Animate it",
+          "cta": "Animate it"
+        },
+        {
+          "id": "scene-03",
+          "title": "Scene 3",
+          "subtitle": "The Enchanted Forest Path",
+          "body": "The knight ventures deep into an ancient woodland where sunlight filters through towering trees and magic whispers through the leaves.",
+          "image": "/images/output (3).png",
+          "prompt": "Animate it",
+          "cta": "Animate it"
+        },
+        {
+          "id": "scene-04",
+          "title": "Scene 4",
+          "subtitle": "The Magical Sword in Stone",
+          "body": "A legendary blade radiates ethereal light from its stone prison, waiting for a worthy hero to claim its power and fulfill an ancient prophecy.",
+          "image": "/images/output (4).png",
+          "prompt": "Animate it",
+          "cta": "Animate it"
+        },
+        {
+          "id": "scene-05",
+          "title": "Scene 5",
+          "subtitle": "The Dark Cave Entrance",
+          "body": "Ancient runes mark the entrance to a foreboding cavern where darkness dwells and only the bravest dare to enter and face unknown terrors.",
+          "image": "/images/output (5).png",
+          "prompt": "Animate it",
+          "cta": "Animate it"
+        },
+        {
+          "id": "scene-06",
+          "title": "Scene 6",
+          "subtitle": "The Dragon's Treasure Hoard",
+          "body": "Mountains of glittering gold and precious jewels fill the dragon's lair, the reward for courage and the prize for defeating the fearsome beast.",
+          "image": "/images/output (6).png",
+          "prompt": "Animate it",
+          "cta": "Animate it"
+        },
+        {
+          "id": "scene-07",
+          "title": "Scene 7",
+          "subtitle": "The Knight Victorious",
+          "body": "Battle-worn but triumphant, the knight raises his sword to the heavens, having conquered the darkness and proven his valor and strength.",
+          "image": "/images/output (7).png",
+          "prompt": "Animate it",
+          "cta": "Animate it"
+        },
+        {
+          "id": "scene-08",
+          "title": "Scene 8",
+          "subtitle": "The Royal Crown",
+          "body": "An ornate golden crown adorned with precious gems rests upon velvet, symbol of honor and the kingdom's gratitude for the hero's bravery.",
+          "image": "/images/output (8).png",
+          "prompt": "Animate it",
+          "cta": "Animate it"
+        },
+        {
+          "id": "scene-09",
+          "title": "Scene 9",
+          "subtitle": "The Village Celebration",
+          "body": "The village erupts in joyous celebration with colorful banners and flowers adorning the square as people gather to honor their returning hero.",
+          "image": "/images/output (9).png",
+          "prompt": "Animate it",
+          "cta": "Animate it"
+        },
+        {
+          "id": "scene-10",
+          "title": "Scene 10",
+          "subtitle": "The Sunset Over the Kingdom",
+          "body": "Peace returns to the realm as the sun sets over rolling hills and the castle, painting the sky in brilliant colors of hope.",
+          "image": "/images/output (10).png",
+          "prompt": "Animate it",
+          "cta": "Animate it"
+        }
+      ]
+    },
+    {
+      "id": "dragon",
+      "title": "The Dragon Rises",
+      "subtitle": "10 scenes • Fantasy",
+      "poster": "/images/s2s1.png",
+      "slides": [
+        {
+          "id": "dragon-01",
+          "title": "Scene 1",
+          "subtitle": "The Peaceful Kingdom",
+          "body": "A tranquil medieval kingdom rests in green valleys, villages thriving, farmers working fields, warm sunlight glowing across peaceful homes and streams.",
+          "image": "/images/s2s1.png",
+          "prompt": "Animate it",
+          "cta": "Animate it"
+        },
+        {
+          "id": "dragon-02",
+          "title": "Scene 2",
+          "subtitle": "The Mountain Rumbles",
+          "body": "A towering snow-capped mountain trembles violently, dark smoke rising from its peak, rocks tumbling down slopes, storm clouds gathering above.",
+          "image": "/images/s2s2.png",
+          "prompt": "Animate it",
+          "cta": "Animate it"
+        },
+        {
+          "id": "dragon-03",
+          "title": "Scene 3",
+          "subtitle": "The Dragon Emerges",
+          "body": "From the cavernous mountain mouth bursts a massive red dragon, wings spread wide, golden eyes blazing, fire glowing deep within.",
+          "image": "/images/s2s3.png",
+          "prompt": "Animate it",
+          "cta": "Animate it"
+        },
+        {
+          "id": "dragon-04",
+          "title": "Scene 4",
+          "subtitle": "The Burning Village",
+          "body": "Flames devour wooden homes as smoke fills the sky, villagers flee frightened, marketplace abandoned, ash drifting slowly across streets.",
+          "image": "/images/s2s4.png",
+          "prompt": "Animate it",
+          "cta": "Animate it"
+        },
+        {
+          "id": "dragon-05",
+          "title": "Scene 5",
+          "subtitle": "The Royal Council Chamber",
+          "body": "Inside the grand stone throne room, worried nobles gather around maps and scrolls, torches flicker while urgent plans form.",
+          "image": "/images/s2s5.png",
+          "prompt": "Animate it",
+          "cta": "Animate it"
+        },
+        {
+          "id": "dragon-06",
+          "title": "Scene 6",
+          "subtitle": "The Young Knight Volunteers",
+          "body": "A young knight in shining armor steps forward bravely, hand gripping his sword, vowing to face the dragon alone.",
+          "image": "/images/s2s6.png",
+          "prompt": "Animate it",
+          "cta": "Animate it"
+        },
+        {
+          "id": "dragon-07",
+          "title": "Scene 7",
+          "subtitle": "The Enchanted Shield",
+          "body": "A magical shield covered in glowing runes floats in mystical light, ancient power radiating, chosen as the knight’s protection.",
+          "image": "/images/s2s7.png",
+          "prompt": "Animate it",
+          "cta": "Animate it"
+        },
+        {
+          "id": "dragon-08",
+          "title": "Scene 8",
+          "subtitle": "The Epic Battle",
+          "body": "On a rocky battlefield the knight confronts the dragon, fiery breath roaring, shield raised high, sparks and flames everywhere.",
+          "image": "/images/s2s8.png",
+          "prompt": "Animate it",
+          "cta": "Animate it"
+        },
+        {
+          "id": "dragon-09",
+          "title": "Scene 9",
+          "subtitle": "The Dragon Slain",
+          "body": "After the battle the dragon rests peacefully within its crystal cave, wounds healed, gentle glow surrounding the quiet mountain.",
+          "image": "/images/s2s9.png",
+          "prompt": "Animate it",
+          "cta": "Animate it"
+        },
+        {
+          "id": "dragon-10",
+          "title": "Scene 10",
+          "subtitle": "The Kingdom Restored",
+          "body": "The kingdom celebrates under golden sunlight, villages rebuilt, people joyful again, flowers blooming across fields, peace finally restored.",
+          "image": "/images/s2s10.png",
+          "prompt": "Animate it",
+          "cta": "Animate it"
+        }
+      ]
+    }
+  ]
+}
