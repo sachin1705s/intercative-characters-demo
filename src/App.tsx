@@ -521,26 +521,6 @@ function App() {
     return true;
   };
 
-  const handleSpeakWish = () => {
-    if (isTranscribing) {
-      return;
-    }
-    if (isRecording) {
-      stopRecording();
-      return;
-    }
-    if (isListeningBrowser) {
-      recognitionRef.current?.stop();
-      setIsListeningBrowser(false);
-      return;
-    }
-    setSpeechError(null);
-    const started = startBrowserSTT();
-    if (!started) {
-      startBackendRecording();
-    }
-  };
-
   const scheduleGesturePrompt = (label: GestureLabel) => {
     pendingGestureRef.current = label;
     if (pendingTimerRef.current) {
