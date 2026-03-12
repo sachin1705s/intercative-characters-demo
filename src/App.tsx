@@ -105,9 +105,6 @@ function App() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [gestureStatus, setGestureStatus] = useState('');
   const [gestureLatency, setGestureLatency] = useState<number | null>(null);
-  const [showGeminiOverlay, setShowGeminiOverlay] = useState(false);
-  const [geminiKeyInput, setGeminiKeyInput] = useState('');
-  const [geminiStatus, setGeminiStatus] = useState<string | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const mediaStreamRef = useRef<MediaStream | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
@@ -360,29 +357,6 @@ function App() {
     setApiKey(trimmed);
     setKeyInput('');
     setError(null);
-  };
-
-  const handleSaveGeminiKey = async () => {
-    const trimmed = geminiKeyInput.trim();
-    if (!trimmed) {
-      setGeminiStatus('Please enter a valid Gemini API key.');
-      return;
-    }
-    try {
-      const response = await fetch('/api/config/gemini-key', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ apiKey: trimmed })
-      });
-      if (!response.ok) {
-        throw new Error('Failed to save Gemini key.');
-      }
-      setGeminiStatus('Gemini key saved for this session.');
-      setShowGeminiOverlay(false);
-      setGeminiKeyInput('');
-    } catch {
-      setGeminiStatus('Failed to save Gemini key.');
-    }
   };
 
   const handleTextPromptSubmit = () => {
@@ -823,9 +797,6 @@ function App() {
                 >
                   {gesturesEnabled ? 'Gestures on' : 'Gestures off'}
                 </button>
-                <button className="btn ghost" onClick={() => setShowGeminiOverlay(true)}>
-                  Gemini key
-                </button>
               </div>
             ) : null}
           </div>
@@ -901,27 +872,6 @@ function App() {
               </button>
             </div>
             <p className="key-hint">Key is loaded automatically from the server in production.</p>
-          </div>
-        </div>
-      ) : null}
-      {showGeminiOverlay ? (
-        <div className="key-overlay" role="dialog" aria-modal="true">
-          <div className="key-card">
-            <h2>Enter Gemini API Key</h2>
-            <p>Saved in memory on the server for this session.</p>
-            <div className="key-input">
-              <input
-                type="password"
-                value={geminiKeyInput}
-                onChange={(event) => setGeminiKeyInput(event.target.value)}
-                placeholder="AIza..."
-                autoComplete="off"
-              />
-              <button className="btn primary" onClick={handleSaveGeminiKey}>
-                Save Gemini Key
-              </button>
-            </div>
-            {geminiStatus ? <p className="key-hint">{geminiStatus}</p> : null}
           </div>
         </div>
       ) : null}
