@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type ChangeEvent, type KeyboardEvent } from 'react';
 import { Analytics } from '@vercel/analytics/react';
+import { SpeedInsights } from '@vercel/speed-insights/react';
 import type { ConnectionStatus } from '@odysseyml/odyssey';
 import slidesData from './data/slides.json';
 import { OdysseyService, loadImageFile, type StreamState } from './lib/odyssey';
@@ -957,6 +958,7 @@ function AppWithAnalytics() {
     <>
       <App />
       <Analytics />
+      <SpeedInsights />
     </>
   );
 }
