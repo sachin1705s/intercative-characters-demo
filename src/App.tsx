@@ -539,6 +539,26 @@ function App() {
     }, GESTURE_DELAY_MS);
   };
 
+  const handleSpeakWish = () => {
+    if (isTranscribing) {
+      return;
+    }
+    if (isRecording) {
+      stopRecording();
+      return;
+    }
+    if (isListeningBrowser) {
+      recognitionRef.current?.stop();
+      setIsListeningBrowser(false);
+      return;
+    }
+    setSpeechError(null);
+    const started = startBrowserSTT();
+    if (!started) {
+      startBackendRecording();
+    }
+  };
+
   const classifyGestureFromFrame = async (dataUrl: string) => {
     const now = Date.now();
     if (visionInFlightRef.current) {
@@ -834,6 +854,9 @@ function App() {
               />
               <button className="btn ghost" onClick={handleTextPromptSubmit} disabled={!isStreamingReady}>
                 Send
+              </button>
+              <button className="btn ghost" onClick={handleSpeakWish} disabled={!isStreamingReady}>
+                {isRecording || isListeningBrowser ? 'Stop' : isTranscribing ? '...' : 'Speak'}
               </button>
             </div>
             <button className="btn ghost" onClick={handlePrev}>
