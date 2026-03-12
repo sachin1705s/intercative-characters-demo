@@ -195,6 +195,68 @@
           "cta": "Animate it"
         }
       ]
+    },
+    {
+      "id": "luna-pip",
+      "title": "Luna and Pip",
+      "subtitle": "6 scenes • Adventure",
+      "poster": "/images/slide-1.png",
+      "slides": [
+        {
+          "id": "signal-forest",
+          "title": "Signal Forest",
+          "subtitle": "Story 01",
+          "body": "Luna and Pip tiptoe into the Signal Forest, where tiny lights blink like fireflies. Each light is a message from a friend. Luna waves her lantern, and the forest twinkles back in a happy hello.",
+          "image": "/images/slide-1.png",
+          "prompt": "A bright, cheerful forest at dusk with colorful glowing fireflies, soft pastel sky, friendly whimsical mood, smooth camera glide, high detail, kid-friendly.",
+          "cta": "Wave to the lights"
+        },
+        {
+          "id": "rainbow-station",
+          "title": "Rainbow Station",
+          "subtitle": "Story 02",
+          "body": "At Rainbow Station, the train is made of shining balloons. Pip turns a big candy dial, and the station lights up in pinks and blues. The doors open with a giggle.",
+          "image": "/images/slide-2.png",
+          "prompt": "A vibrant, playful train station with balloon-like trains, candy colors, glowing lights, joyful atmosphere, cinematic but cute, slow push-in.",
+          "cta": "Spin the candy dial"
+        },
+        {
+          "id": "mirror-basin",
+          "title": "Mirror Basin",
+          "subtitle": "Story 03",
+          "body": "In the Mirror Basin, the water is a smooth rainbow. Luna drops a tiny pebble, and the ripples become floating stars. Pip makes a wish for new adventures.",
+          "image": "/images/slide-3.png",
+          "prompt": "A colorful magical pond with rainbow water, floating star lights, pastel aurora, gentle ripples, whimsical and bright, slow lateral pan.",
+          "cta": "Make a wish"
+        },
+        {
+          "id": "character-luna",
+          "title": "Luna",
+          "subtitle": "Character",
+          "body": "Luna is a brave little explorer with a glowing lantern. She loves making new friends and listens closely to every tiny signal in the world.",
+          "image": "/images/slide-4.png",
+          "prompt": "A single cute girl character named Luna standing with a glowing lantern, bright colors, clean background, friendly smile, kid-friendly 3D cartoon style.",
+          "cta": "Say hello"
+        },
+        {
+          "id": "cloud-bridge",
+          "title": "Cloud Bridge",
+          "subtitle": "Story 05",
+          "body": "They cross the Cloud Bridge made of soft marshmallow mist. Every step makes a tiny rainbow puff. A golden kite guides them toward the next secret.",
+          "image": "/images/slide-5.png",
+          "prompt": "A bright sky bridge made of fluffy clouds and pastel mist, rainbow puffs with each step, whimsical and happy, gentle camera drift.",
+          "cta": "Follow the kite"
+        },
+        {
+          "id": "character-pip",
+          "title": "Pip",
+          "subtitle": "Character",
+          "body": "Pip is a playful little robot with a big heart. He loves buttons, sparkles, and cheering his friends with a thumbs-up.",
+          "image": "/images/slide-6.png",
+          "prompt": "A single cute robot character named Pip with round friendly eyes, bright colors, clean background, kid-friendly 3D cartoon style.",
+          "cta": "Give a thumbs-up"
+        }
+      ]
     }
   ]
 }
