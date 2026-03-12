@@ -85,6 +85,7 @@ function getSpeechRecognition(): (new () => SpeechRecognitionLike) | null {
 
 function App() {
   const [apiKey, setApiKey] = useState<string | undefined>(undefined);
+  const [keyLoading, setKeyLoading] = useState(true);
   const [keyInput, setKeyInput] = useState('');
   const [showLanding, setShowLanding] = useState(true);
   const [selectedStory, setSelectedStory] = useState<string | null>(stories[0]?.id ?? null);
@@ -144,16 +145,13 @@ function App() {
         }
         // Fall back to localStorage (dev / manual entry)
         const storedKey = safeStorage.get(STORAGE_KEY);
-        if (storedKey) {
-          setApiKey(storedKey);
-        }
+        if (storedKey) setApiKey(storedKey);
       })
       .catch(() => {
         const storedKey = safeStorage.get(STORAGE_KEY);
-        if (storedKey) {
-          setApiKey(storedKey);
-        }
-      });
+        if (storedKey) setApiKey(storedKey);
+      })
+      .finally(() => setKeyLoading(false));
   }, []);
 
   useEffect(() => {
@@ -299,36 +297,33 @@ function App() {
   }, []);
 
   const pttActiveRef = useRef(false);
+  const pttStartRef = useRef<() => void>(() => {});
+  const pttStopRef = useRef<() => void>(() => {});
 
   useEffect(() => {
     const onKeyDown = (e: globalThis.KeyboardEvent) => {
       if (e.code === 'Space' && e.ctrlKey && !pttActiveRef.current) {
         e.preventDefault();
+        e.stopPropagation();
+        (document.activeElement as HTMLElement | null)?.blur();
         pttActiveRef.current = true;
-        setSpeechError(null);
-        const started = startBrowserSTT();
-        if (!started) {
-          startBackendRecording();
-        }
+        pttStartRef.current();
       }
     };
 
     const onKeyUp = (e: globalThis.KeyboardEvent) => {
       if ((e.code === 'Space' || e.code === 'ControlLeft' || e.code === 'ControlRight') && pttActiveRef.current) {
+        e.preventDefault();
         pttActiveRef.current = false;
-        recognitionRef.current?.stop();
-        setIsListeningBrowser(false);
-        if (mediaRecorderRef.current?.state === 'recording') {
-          mediaRecorderRef.current.stop();
-        }
+        pttStopRef.current();
       }
     };
 
-    window.addEventListener('keydown', onKeyDown);
-    window.addEventListener('keyup', onKeyUp);
+    window.addEventListener('keydown', onKeyDown, { capture: true });
+    window.addEventListener('keyup', onKeyUp, { capture: true });
     return () => {
-      window.removeEventListener('keydown', onKeyDown);
-      window.removeEventListener('keyup', onKeyUp);
+      window.removeEventListener('keydown', onKeyDown, { capture: true });
+      window.removeEventListener('keyup', onKeyUp, { capture: true });
     };
   }, []);
 
@@ -490,7 +485,10 @@ function App() {
             setSpeechError('We did not hear anything. Try again.');
           }
         } catch (err) {
-          setSpeechError('Transcription failed. Try again.');
+          const browserStarted = startBrowserSTT();
+          if (!browserStarted) {
+            setSpeechError('Transcription failed. Try again.');
+          }
         } finally {
           setIsTranscribing(false);
           mediaStreamRef.current?.getTracks().forEach((track) => track.stop());
@@ -501,7 +499,10 @@ function App() {
       setIsRecording(true);
       recorder.start();
     } catch (err) {
-      setSpeechError('Microphone access was blocked.');
+      const browserStarted = startBrowserSTT();
+      if (!browserStarted) {
+        setSpeechError('Microphone access was blocked.');
+      }
     }
   };
 
@@ -525,9 +526,8 @@ function App() {
     };
 
     recognition.onerror = () => {
-      setSpeechError('Browser speech failed. Trying server...');
+      setSpeechError('Browser speech failed.');
       setIsListeningBrowser(false);
-      startBackendRecording();
     };
 
     recognition.onend = () => {
@@ -573,10 +573,7 @@ function App() {
       return;
     }
     setSpeechError(null);
-    const started = startBrowserSTT();
-    if (!started) {
-      startBackendRecording();
-    }
+    startBackendRecording();
   };
 
   const classifyGestureFromFrame = async (dataUrl: string) => {
@@ -704,7 +701,20 @@ function App() {
     mediaRecorderRef.current?.stop();
   };
 
-  const showKeyOverlay = !apiKey;
+  // Keep PTT refs pointing to latest function instances to avoid stale closures
+  pttStartRef.current = () => {
+    setSpeechError(null);
+    startBackendRecording();
+  };
+  pttStopRef.current = () => {
+    recognitionRef.current?.stop();
+    setIsListeningBrowser(false);
+    if (mediaRecorderRef.current?.state === 'recording') {
+      mediaRecorderRef.current.stop();
+    }
+  };
+
+  const showKeyOverlay = !keyLoading && !apiKey;
 
   const handleSelectStory = (id: string) => {
     setSelectedStory(id);
