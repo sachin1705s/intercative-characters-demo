@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type ChangeEvent, type KeyboardEvent } from 'react';
+import { Analytics } from '@vercel/analytics/react';
 import type { ConnectionStatus } from '@odysseyml/odyssey';
 import slidesData from './data/slides.json';
 import { OdysseyService, loadImageFile, type StreamState } from './lib/odyssey';
@@ -951,4 +952,13 @@ function App() {
   );
 }
 
-export default App;
+function AppWithAnalytics() {
+  return (
+    <>
+      <App />
+      <Analytics />
+    </>
+  );
+}
+
+export default AppWithAnalytics;
