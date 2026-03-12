@@ -108,6 +108,7 @@ function App() {
   const [gestureLatency, setGestureLatency] = useState<number | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const mediaStreamRef = useRef<MediaStream | null>(null);
+  const odysseyStreamRef = useRef<MediaStream | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
@@ -167,6 +168,7 @@ function App() {
     service
       .connect({
         onConnected: (stream) => {
+          odysseyStreamRef.current = stream;
           if (videoRef.current) {
             videoRef.current.srcObject = stream;
             videoRef.current.play().catch(() => undefined);
@@ -224,7 +226,7 @@ function App() {
 
   useEffect(() => {
     const service = serviceRef.current;
-    if (!service || connectionStatus !== 'connected') {
+    if (!service || connectionStatus !== 'connected' || showLanding) {
       return;
     }
 
@@ -258,7 +260,7 @@ function App() {
       setIsStreamingReady(false);
       setError(err instanceof Error ? err.message : String(err));
     });
-  }, [connectionStatus, index, slide.id, slide.image, slide.prompt, isUploadSlide]);
+  }, [connectionStatus, showLanding, index, slide.id, slide.image, slide.prompt, isUploadSlide]);
 
 
   useEffect(() => {
@@ -296,6 +298,17 @@ function App() {
       cameraRef.current?.srcObject && (cameraRef.current.srcObject as MediaStream).getTracks().forEach((t) => t.stop());
     };
   }, []);
+
+  // If the Odyssey stream connected while the landing page was showing (video element
+  // didn't exist yet), attach the stream now that the story view is rendered.
+  useEffect(() => {
+    if (!showLanding && odysseyStreamRef.current && videoRef.current) {
+      if (!videoRef.current.srcObject) {
+        videoRef.current.srcObject = odysseyStreamRef.current;
+        videoRef.current.play().catch(() => undefined);
+      }
+    }
+  }, [showLanding]);
 
   const pttActiveRef = useRef(false);
   const pttStartRef = useRef<() => void>(() => {});
