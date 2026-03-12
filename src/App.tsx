@@ -124,6 +124,7 @@ function App() {
   const visionRetryAtRef = useRef(0);
   const lastCaptureAtRef = useRef(0);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const gestureSessionRef = useRef(0);
 
   const activeStory = stories.find((story) => story.id === selectedStory) ?? stories[0];
   const slides = activeStory?.slides ?? [];
@@ -667,8 +668,13 @@ function App() {
       return;
     }
     try {
+      const sessionId = ++gestureSessionRef.current;
       setGestureStatus('Starting camera...');
       const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' } });
+      if (sessionId !== gestureSessionRef.current) {
+        stream.getTracks().forEach((track) => track.stop());
+        return;
+      }
       if (cameraRef.current) {
         cameraRef.current.srcObject = stream;
         await cameraRef.current.play();
@@ -682,13 +688,21 @@ function App() {
   };
 
   const disableGestures = () => {
+    gestureSessionRef.current += 1;
     setGesturesEnabled(false);
-    setGestureStatus('Gesture detection off');
+    setGestureStatus('');
+    setGestureLatency(null);
+    pendingGestureRef.current = null;
+    if (pendingTimerRef.current) {
+      window.clearTimeout(pendingTimerRef.current);
+      pendingTimerRef.current = null;
+    }
     if (detectFrameRef.current) {
       cancelAnimationFrame(detectFrameRef.current);
       detectFrameRef.current = null;
     }
     if (cameraRef.current?.srcObject) {
+      cameraRef.current.pause();
       (cameraRef.current.srcObject as MediaStream).getTracks().forEach((t) => t.stop());
       cameraRef.current.srcObject = null;
     }
