@@ -84,8 +84,7 @@ function getSpeechRecognition(): (new () => SpeechRecognitionLike) | null {
 }
 
 function App() {
-  const envApiKey = import.meta.env.VITE_ODYSSEY_API_KEY as string | undefined;
-  const [apiKey, setApiKey] = useState<string | undefined>(envApiKey);
+  const [apiKey, setApiKey] = useState<string | undefined>(undefined);
   const [keyInput, setKeyInput] = useState('');
   const [showLanding, setShowLanding] = useState(true);
   const [selectedStory, setSelectedStory] = useState<string | null>(stories[0]?.id ?? null);
@@ -138,18 +137,31 @@ function App() {
 
 
   useEffect(() => {
-    if (envApiKey) {
-      return;
-    }
-    const storedKey = safeStorage.get(STORAGE_KEY);
-    if (storedKey) {
-      setApiKey(storedKey);
-    }
-  }, [envApiKey]);
+    // Try fetching the key from the backend first (production)
+    fetch('/api/odyssey/token')
+      .then((r) => r.ok ? r.json() : null)
+      .then((data) => {
+        if (data?.apiKey) {
+          setApiKey(data.apiKey);
+          return;
+        }
+        // Fall back to localStorage (dev / manual entry)
+        const storedKey = safeStorage.get(STORAGE_KEY);
+        if (storedKey) {
+          setApiKey(storedKey);
+        }
+      })
+      .catch(() => {
+        const storedKey = safeStorage.get(STORAGE_KEY);
+        if (storedKey) {
+          setApiKey(storedKey);
+        }
+      });
+  }, []);
 
   useEffect(() => {
     if (!apiKey) {
-      setError('Missing Odyssey API key. Add it in the overlay or set VITE_ODYSSEY_API_KEY in .env.');
+      setError('Missing Odyssey API key. Add it in the overlay or set ODYSSEY_API_KEY in your environment.');
       return;
     }
 
@@ -763,7 +775,7 @@ function App() {
                   Save & Connect
                 </button>
               </div>
-              <p className="key-hint">You can also set VITE_ODYSSEY_API_KEY in .env.</p>
+              <p className="key-hint">Key is loaded automatically from the server in production.</p>
             </div>
           </div>
         ) : null}
@@ -888,7 +900,7 @@ function App() {
                 Save & Connect
               </button>
             </div>
-            <p className="key-hint">You can also set VITE_ODYSSEY_API_KEY in .env.</p>
+            <p className="key-hint">Key is loaded automatically from the server in production.</p>
           </div>
         </div>
       ) : null}
