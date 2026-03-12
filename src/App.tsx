@@ -298,6 +298,40 @@ function App() {
     };
   }, []);
 
+  const pttActiveRef = useRef(false);
+
+  useEffect(() => {
+    const onKeyDown = (e: globalThis.KeyboardEvent) => {
+      if (e.code === 'Space' && e.ctrlKey && !pttActiveRef.current) {
+        e.preventDefault();
+        pttActiveRef.current = true;
+        setSpeechError(null);
+        const started = startBrowserSTT();
+        if (!started) {
+          startBackendRecording();
+        }
+      }
+    };
+
+    const onKeyUp = (e: globalThis.KeyboardEvent) => {
+      if ((e.code === 'Space' || e.code === 'ControlLeft' || e.code === 'ControlRight') && pttActiveRef.current) {
+        pttActiveRef.current = false;
+        recognitionRef.current?.stop();
+        setIsListeningBrowser(false);
+        if (mediaRecorderRef.current?.state === 'recording') {
+          mediaRecorderRef.current.stop();
+        }
+      }
+    };
+
+    window.addEventListener('keydown', onKeyDown);
+    window.addEventListener('keyup', onKeyUp);
+    return () => {
+      window.removeEventListener('keydown', onKeyDown);
+      window.removeEventListener('keyup', onKeyUp);
+    };
+  }, []);
+
   const handlePrev = () => {
     setIndex((prev) => (prev - 1 + slideCount) % slideCount);
   };
