@@ -2,6 +2,8 @@ import { useEffect, useRef, useState, type ChangeEvent, type KeyboardEvent } fro
 import { Analytics } from '@vercel/analytics/react';
 import { SpeedInsights } from '@vercel/speed-insights/react';
 import type { ConnectionStatus } from '@odysseyml/odyssey';
+import { FilesetResolver, ObjectDetector } from '@mediapipe/tasks-vision';
+import { AtomsClient } from 'atoms-client-sdk';
 import slidesData from './data/slides.json';
 import { OdysseyService, loadImageFile, type StreamState } from './lib/odyssey';
 import './App.css';
@@ -50,8 +52,9 @@ type SpeechRecognitionLike = {
 const stories = (slidesData as { stories: Story[] }).stories;
 const STORAGE_KEY = 'odyssey_api_key';
 const GESTURE_DELAY_MS = 600;
-const GEMINI_GESTURE_COOLDOWN_MS = 500;
-const VISION_POLL_MS = 600;
+const GEMINI_GESTURE_COOLDOWN_MS = 1700;
+const VISION_POLL_MS = 1700;
+const OBJECT_POLL_MS = 1200;
 
 const GESTURE_PROMPTS: Record<GestureLabel, string> = {
   hello: 'do hello',
@@ -108,6 +111,25 @@ function App() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [gestureStatus, setGestureStatus] = useState('');
   const [gestureLatency, setGestureLatency] = useState<number | null>(null);
+  const [objectDetectionEnabled, setObjectDetectionEnabled] = useState(false);
+  const [objectStatus, setObjectStatus] = useState('');
+  const [objectLatency, setObjectLatency] = useState<number | null>(null);
+  const [voiceStatus, setVoiceStatus] = useState<'idle' | 'connecting' | 'connected' | 'error'>('idle');
+  const [voiceError, setVoiceError] = useState<string | null>(null);
+  const [lastVoiceIntent, setLastVoiceIntent] = useState<string | null>(null);
+  const [lastVoiceText, setLastVoiceText] = useState<string | null>(null);
+  const [lastVoiceEvent, setLastVoiceEvent] = useState<string | null>(null);
+  const [lastVoicePrompt, setLastVoicePrompt] = useState<string | null>(null);
+  const [lastVoiceActionAt, setLastVoiceActionAt] = useState<number | null>(null);
+  const [lastVoiceSource, setLastVoiceSource] = useState<string | null>(null);
+  const [lastVoiceHint, setLastVoiceHint] = useState<string | null>(null);
+  const [keysOpen, setKeysOpen] = useState(false);
+  const [odysseyInput, setOdysseyInput] = useState('');
+  const [geminiInput, setGeminiInput] = useState('');
+  const [smallestInput, setSmallestInput] = useState('');
+  const [keysStatus, setKeysStatus] = useState<string | null>(null);
+  const [keysError, setKeysError] = useState<string | null>(null);
+  const [keysSaving, setKeysSaving] = useState(false);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const mediaStreamRef = useRef<MediaStream | null>(null);
   const odysseyStreamRef = useRef<MediaStream | null>(null);
@@ -118,6 +140,8 @@ function App() {
   const serviceRef = useRef<OdysseyService | null>(null);
   const requestIdRef = useRef(0);
   const detectFrameRef = useRef<number | null>(null);
+  const objectDetectorRef = useRef<ObjectDetector | null>(null);
+  const objectInFlightRef = useRef(false);
   const imageCacheRef = useRef<Map<string, File>>(new Map());
   const pendingGestureRef = useRef<GestureLabel | null>(null);
   const pendingTimerRef = useRef<number | null>(null);
@@ -125,9 +149,17 @@ function App() {
   const lastVisionCheckRef = useRef(0);
   const visionInFlightRef = useRef(false);
   const visionRetryAtRef = useRef(0);
+  const lastObjectCheckRef = useRef(0);
+  const objectSessionRef = useRef(0);
   const lastCaptureAtRef = useRef(0);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const gestureSessionRef = useRef(0);
+  const atomsClientRef = useRef<AtomsClient | null>(null);
+  const isStreamingReadyRef = useRef(false);
+  const isCharacterAgentSlideRef = useRef(false);
+  const lastVoiceActionAtRef = useRef(0);
+  const handleInteractRef = useRef<(promptOverride?: string) => void>(() => undefined);
+  const voiceAwaitTimerRef = useRef<number | null>(null);
 
   const activeStory = stories.find((story) => story.id === selectedStory) ?? stories[0];
   const slides = activeStory?.slides ?? [];
@@ -136,6 +168,29 @@ function App() {
   const landingPosterUrl = encodeURI(activeStory?.poster ?? '/images/output (1).png');
   const slideCount = slides.length;
   const isUploadSlide = slide.id === 'make-your-magic';
+  const isCharacterAgentSlide = activeStory?.id === 'characters'
+    && [
+      'characters-01',
+      'characters-02',
+      'characters-03',
+      'characters-04',
+      'characters-05',
+      'characters-06',
+      'characters-07',
+      'characters-08'
+    ].includes(slide.id);
+  const VOICE_AGENT_ID_BY_SLIDE: Record<string, { id: string; label: string }> = {
+    'characters-01': { id: '69b29eee05aa521e4a898a1b', label: 'Tom' },
+    'characters-02': { id: '69b2d577323d8b893f9aa8b2', label: 'Albert Einstein' },
+    'characters-03': { id: '69b2d9382f10ab5fd1f8b644', label: 'Alexander' },
+    'characters-04': { id: '69b2da8c99e3585d551e0787', label: 'Bear' },
+    'characters-05': { id: '69b2f1f2063891e15a90d098', label: 'SpongeBob' },
+    'characters-06': { id: '69b32a75cd4a50dca6a17dee', label: 'Cleopatra' },
+    'characters-07': { id: '69b32b5ab57a92ad341f350d', label: 'Circus Lion' },
+    'characters-08': { id: '69b32b875e7d78b049089488', label: 'George Washington' }
+  };
+  const activeVoiceAgent = VOICE_AGENT_ID_BY_SLIDE[slide.id];
+  const slideCtaRef = useRef('');
 
 
   useEffect(() => {
@@ -157,6 +212,83 @@ function App() {
       })
       .finally(() => setKeyLoading(false));
   }, []);
+
+  useEffect(() => {
+    if (!keysOpen) {
+      return;
+    }
+    const storedKey = apiKey ?? safeStorage.get(STORAGE_KEY) ?? '';
+    setOdysseyInput(storedKey);
+    setGeminiInput('');
+    setSmallestInput('');
+    setKeysStatus(null);
+    setKeysError(null);
+  }, [keysOpen, apiKey]);
+
+  useEffect(() => {
+    isStreamingReadyRef.current = isStreamingReady;
+  }, [isStreamingReady]);
+
+  useEffect(() => {
+    isCharacterAgentSlideRef.current = isCharacterAgentSlide;
+    if (!isCharacterAgentSlide && voiceStatus === 'connected') {
+      atomsClientRef.current?.stopSession();
+      setVoiceStatus('idle');
+    }
+  }, [isCharacterAgentSlide, voiceStatus]);
+
+  useEffect(() => {
+    if (!isStreamingReady && voiceStatus === 'connected') {
+      atomsClientRef.current?.stopSession();
+      setVoiceStatus('idle');
+      setVoiceError('Stream stopped.');
+    }
+  }, [isStreamingReady, voiceStatus]);
+
+  useEffect(() => {
+    if (voiceStatus === 'connected' && isCharacterAgentSlide) {
+      return;
+    }
+    stopVoiceCapture();
+  }, [voiceStatus, isCharacterAgentSlide]);
+
+  useEffect(() => {
+    if (!isStreamingReady) {
+      return;
+    }
+    const slideId = slide.id;
+    const hasRandoms = Boolean(SLIDE_RANDOM_ACTIONS[slideId]?.length || SLIDE_RANDOM_OBJECTS[slideId]?.length);
+    if (!hasRandoms) {
+      return;
+    }
+
+    let cancelled = false;
+    const minDelay = 7000;
+    const maxDelay = 14000;
+
+    const scheduleNext = () => {
+      if (cancelled) return;
+      const delay = Math.floor(Math.random() * (maxDelay - minDelay + 1)) + minDelay;
+      window.setTimeout(() => {
+        if (cancelled || !isStreamingReadyRef.current) return;
+        const prompt = getRandomPromptForSlide(slideId);
+        if (prompt) {
+          handleInteractRef.current(prompt);
+        }
+        scheduleNext();
+      }, delay);
+    };
+
+    scheduleNext();
+    return () => {
+      cancelled = true;
+    };
+  }, [isStreamingReady, slide.id]);
+
+  useEffect(() => {
+    slideCtaRef.current = slide.cta;
+  }, [slide.cta]);
+
 
   useEffect(() => {
     if (!apiKey) {
@@ -294,12 +426,25 @@ function App() {
 
   useEffect(() => {
     return () => {
+      atomsClientRef.current?.stopSession();
+    };
+  }, []);
+
+  useEffect(() => {
+    return () => {
       if (detectFrameRef.current) {
         cancelAnimationFrame(detectFrameRef.current);
       }
       cameraRef.current?.srcObject && (cameraRef.current.srcObject as MediaStream).getTracks().forEach((t) => t.stop());
     };
   }, []);
+
+  const stopCameraStream = () => {
+    if (cameraRef.current?.srcObject) {
+      (cameraRef.current.srcObject as MediaStream).getTracks().forEach((track) => track.stop());
+      cameraRef.current.srcObject = null;
+    }
+  };
 
   // If the Odyssey stream connected while the landing page was showing (video element
   // didn't exist yet), attach the stream now that the story view is rendered.
@@ -364,6 +509,271 @@ function App() {
     });
   };
 
+  useEffect(() => {
+    handleInteractRef.current = handleInteract;
+  }, [handleInteract]);
+
+  const OBJECT_KEYWORDS: Array<{ keywords: string[]; object: string }> = [
+    { keywords: ['sword', 'blade'], object: 'a shining sword' },
+    { keywords: ['shield'], object: 'a glowing shield' },
+    { keywords: ['crown', 'tiara'], object: 'a golden crown' },
+    { keywords: ['flower', 'rose', 'bouquet'], object: 'a bright flower' },
+    { keywords: ['star', 'stars'], object: 'twinkling stars' },
+    { keywords: ['balloon', 'balloons'], object: 'colorful balloons' },
+    { keywords: ['book'], object: 'an ancient book' },
+    { keywords: ['map'], object: 'a glowing map' },
+    { keywords: ['lantern', 'lamp'], object: 'a warm lantern' }
+  ];
+
+  const findObjectFromUtterance = (normalized: string) => {
+    for (const entry of OBJECT_KEYWORDS) {
+      for (const key of entry.keywords) {
+        const pattern = new RegExp(`(^|\\b)${key}(\\b|$)`, 'i');
+        if (pattern.test(normalized)) {
+          return entry.object;
+        }
+      }
+    }
+    return null;
+  };
+
+  const mapUtteranceToPrompt = (text: string) => {
+    const normalized = text.toLowerCase();
+    const object = findObjectFromUtterance(normalized);
+    if (/(^|\\b)(hello|hi|hey|yo|greetings)(\\b|$)/.test(normalized)) {
+      return { prompt: 'do hello', label: 'hello', object };
+    }
+    if (/(thumbs?\\s*up|like\\sthis)/.test(normalized)) {
+      return { prompt: 'do thumbs up', label: 'thumbs up', object };
+    }
+    if (/(victory|peace\\s*sign|v\\s*sign)/.test(normalized)) {
+      return { prompt: 'do victory sign', label: 'victory', object };
+    }
+    if (/(namaste|namaskar)/.test(normalized)) {
+      return { prompt: 'do namaste', label: 'namaste', object };
+    }
+    if (/(wave|waving)/.test(normalized)) {
+      return { prompt: 'do hello', label: 'wave', object };
+    }
+    if (/(dance|celebrate|celebration)/.test(normalized)) {
+      return { prompt: slideCtaRef.current || 'Animate it', label: 'celebrate', object };
+    }
+    if (object) {
+      return { prompt: slideCtaRef.current || 'Animate it', label: `object: ${object}`, object };
+    }
+    return null;
+  };
+
+  const SLIDE_RANDOM_ACTIONS: Record<string, string[]> = {
+    'characters-01': [
+      'do hello',
+      'do hello',
+      'do thumbs up',
+      'do victory sign',
+      'do a playful dance',
+      'say hey and wave'
+    ],
+    'characters-04': [
+      'do a sleepy yawn',
+      'lie down and pretend to sleep',
+      'do a gentle dance',
+      'do a friendly wave'
+    ]
+  };
+
+  const SLIDE_RANDOM_OBJECTS: Record<string, string[]> = {
+    'characters-01': [
+      'a slice of cheese',
+      'a tiny bell',
+      'a red balloon'
+    ],
+    'characters-04': [
+      'a honeycomb',
+      'a buzzing bee',
+      'a pair of bees',
+      'a soft thought bubble with honey'
+    ]
+  };
+
+  const getRandomPromptForSlide = (slideId: string) => {
+    const actions = SLIDE_RANDOM_ACTIONS[slideId] ?? [];
+    const objects = SLIDE_RANDOM_OBJECTS[slideId] ?? [];
+    const action = actions.length ? actions[Math.floor(Math.random() * actions.length)] : null;
+    const object = objects.length ? objects[Math.floor(Math.random() * objects.length)] : null;
+    if (action && object) {
+      return `${action}. Include ${object} in the scene.`;
+    }
+    if (action) return action;
+    if (object) return `Include ${object} in the scene.`;
+    return null;
+  };
+
+  const handleVoiceTranscript = (data: { text?: string; topic?: string; type?: string; [key: string]: unknown }) => {
+    if (!isCharacterAgentSlideRef.current) {
+      return;
+    }
+    const text = String(data?.text ?? '').trim();
+    const topic = String(data?.topic ?? '').toLowerCase();
+    const payload = { type: data?.type ?? 'transcript', topic: topic || 'unknown', text };
+    setLastVoiceEvent(JSON.stringify(payload));
+    console.log('[atoms transcript]', data);
+    if (!text) return;
+    setLastVoiceText(text);
+    handleVoiceUtterance(text, 'atoms');
+  };
+
+  const extractPossibleUserText = (payload: unknown) => {
+    if (!payload || typeof payload !== 'object') return null;
+    const data = payload as Record<string, unknown>;
+    const candidates = [
+      data.text,
+      data.transcript,
+      (data.message as Record<string, unknown> | undefined)?.text,
+      (data.user as Record<string, unknown> | undefined)?.text,
+      (data.input as Record<string, unknown> | undefined)?.text,
+      (data.data as Record<string, unknown> | undefined)?.text,
+      (data.payload as Record<string, unknown> | undefined)?.text
+    ];
+    for (const c of candidates) {
+      if (typeof c === 'string' && c.trim()) return c.trim();
+    }
+    return null;
+  };
+
+  const getAtomsClient = () => {
+    if (atomsClientRef.current) {
+      return atomsClientRef.current;
+    }
+    const client = new AtomsClient();
+    client.on('session_started', () => setVoiceStatus('connected'));
+    client.on('session_ended', () => setVoiceStatus('idle'));
+    client.on('agent_start_talking', () => {
+      setVoiceStatus((prev) => (prev === 'connected' ? prev : 'connected'));
+    });
+    client.on('microphone_permission_error', (data: { error?: string }) => {
+      setVoiceError(data?.error || 'Microphone permission error.');
+    });
+    client.on('microphone_access_failed', (data: { error?: string }) => {
+      setVoiceError(data?.error || 'Microphone access failed.');
+    });
+    client.on('update', (data: unknown) => {
+      console.log('[atoms update]', data);
+      setLastVoiceEvent(JSON.stringify({ type: 'update', data }));
+      const text = extractPossibleUserText(data);
+      if (text) {
+        setLastVoiceText(text);
+        handleVoiceUtterance(text, 'update');
+      }
+    });
+    client.on('metadata', (data: unknown) => {
+      console.log('[atoms metadata]', data);
+      setLastVoiceEvent(JSON.stringify({ type: 'metadata', data }));
+      const text = extractPossibleUserText(data);
+      if (text) {
+        setLastVoiceText(text);
+        handleVoiceUtterance(text, 'metadata');
+      }
+    });
+    client.on('error', (err: unknown) => {
+      const message = err instanceof Error ? err.message : String(err);
+      setVoiceError(message);
+      setVoiceStatus('error');
+    });
+    client.on('transcript', (data: { text?: string }) => {
+      handleVoiceTranscript(data);
+    });
+    atomsClientRef.current = client;
+    return client;
+  };
+
+  const handleVoiceUtterance = (text: string, source: string) => {
+    const mapped = mapUtteranceToPrompt(text);
+    if (!mapped) {
+      setLastVoicePrompt('no action (unmapped)');
+      setLastVoiceSource(source);
+      setLastVoiceHint('Try: hello, thumbs up, victory, namaste, wave');
+      return;
+    }
+    const now = Date.now();
+    if (now - lastVoiceActionAtRef.current < 1800) {
+      return;
+    }
+    lastVoiceActionAtRef.current = now;
+    setLastVoiceIntent(mapped.label);
+    setLastVoiceActionAt(now);
+    setLastVoiceSource(source);
+    setLastVoiceHint(null);
+    if (!isStreamingReadyRef.current) {
+      setLastVoicePrompt('stream not ready');
+      return;
+    }
+    const objectPrompt = mapped.object ? ` Include ${mapped.object} in the scene.` : '';
+    const fullPrompt = `${mapped.prompt}.${objectPrompt}`.trim();
+    setLastVoicePrompt(fullPrompt);
+    handleInteractRef.current(fullPrompt);
+  };
+
+  const stopVoiceCapture = () => {
+    // no-op: using SDK transcripts instead of browser speech
+  };
+
+  const startVoiceAgent = async () => {
+    if (voiceStatus === 'connecting') {
+      return;
+    }
+    if (voiceStatus === 'connected') {
+      atomsClientRef.current?.stopSession();
+      setVoiceStatus('idle');
+      return;
+    }
+    if (!isStreamingReadyRef.current) {
+      setVoiceError('Start the stream first.');
+      return;
+    }
+    if (!activeVoiceAgent) {
+      setVoiceError('No voice agent configured for this slide.');
+      return;
+    }
+    setVoiceError(null);
+    setLastVoicePrompt('waiting for transcript');
+    setLastVoiceHint('Speak after the call connects.');
+    if (voiceAwaitTimerRef.current) {
+      window.clearTimeout(voiceAwaitTimerRef.current);
+    }
+    setVoiceStatus('connecting');
+    try {
+      const response = await fetch('/api/smallest/webcall', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ agentId: activeVoiceAgent.id })
+      });
+      if (!response.ok) {
+        const message = await response.text();
+        throw new Error(message || 'Failed to start voice agent.');
+      }
+      const data = await response.json();
+      const accessToken = String(data?.accessToken ?? data?.raw?.data?.accessToken ?? '');
+      const host = String(data?.host ?? data?.raw?.data?.host ?? '');
+      if (!accessToken || !host) {
+        throw new Error('Missing access token or host.');
+      }
+      const client = getAtomsClient();
+      await client.startSession({ accessToken, mode: 'voice', host, sampleRate: 48000 });
+      await client.startAudioPlayback();
+      setVoiceStatus('connected');
+      voiceAwaitTimerRef.current = window.setTimeout(() => {
+        if (!lastVoiceText) {
+          setLastVoicePrompt('no transcript received');
+          setLastVoiceHint('Check mic permission and Smallest agent transcript settings.');
+        }
+      }, 5000);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      setVoiceError(message);
+      setVoiceStatus('error');
+    }
+  };
+
   const startUploadStream = (file: File) => {
     if (!serviceRef.current || connectionStatus !== 'connected') {
       setUploadError('Waiting for connection…');
@@ -402,6 +812,49 @@ function App() {
     setApiKey(trimmed);
     setKeyInput('');
     setError(null);
+  };
+
+  const handleSaveKeys = async () => {
+    const trimmedOdyssey = odysseyInput.trim();
+    const trimmedGemini = geminiInput.trim();
+    const trimmedSmallest = smallestInput.trim();
+    if (!trimmedOdyssey && !trimmedGemini && !trimmedSmallest) {
+      setKeysError('Enter at least one key to save.');
+      return;
+    }
+    setKeysSaving(true);
+    setKeysError(null);
+    setKeysStatus(null);
+    try {
+      const response = await fetch('/api/config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          odysseyApiKey: trimmedOdyssey,
+          geminiApiKey: trimmedGemini,
+          smallestApiKey: trimmedSmallest
+        })
+      });
+
+      if (!response.ok) {
+        const message = response.status === 404
+          ? 'Server key updates are disabled in production.'
+          : 'Failed to save keys.';
+        throw new Error(message);
+      }
+
+      if (trimmedOdyssey) {
+        safeStorage.set(STORAGE_KEY, trimmedOdyssey);
+        setApiKey(trimmedOdyssey);
+        setKeyInput('');
+      }
+
+      setKeysStatus('Saved. Restart the dev server if a key still shows as missing.');
+    } catch (err) {
+      setKeysError(err instanceof Error ? err.message : 'Failed to save keys.');
+    } finally {
+      setKeysSaving(false);
+    }
   };
 
   const handleTextPromptSubmit = () => {
@@ -497,6 +950,10 @@ function App() {
           if (transcript) {
             setSpeechText(transcript);
             handleInteract(transcript);
+            if (voiceStatus === 'connected' && isCharacterAgentSlideRef.current) {
+              setLastVoiceText(transcript);
+              handleVoiceUtterance(transcript, 'stt');
+            }
           } else {
             setSpeechError('We did not hear anything. Try again.');
           }
@@ -620,9 +1077,15 @@ function App() {
       if (response.status === 429) {
         const data = (await response.json()) as { retryAfterMs?: number };
         visionRetryAtRef.current = Date.now() + (data.retryAfterMs ?? 10000);
+        setGestureStatus('Gesture: rate limited');
+        return;
+      }
+      if (response.status === 503) {
+        setGestureStatus('Gesture: missing Gemini key');
         return;
       }
       if (!response.ok) {
+        setGestureStatus(`Gesture: error ${response.status}`);
         return;
       }
 
@@ -640,6 +1103,24 @@ function App() {
     } finally {
       visionInFlightRef.current = false;
     }
+  };
+
+  const ensureObjectDetector = async () => {
+    if (objectDetectorRef.current) {
+      return objectDetectorRef.current;
+    }
+    const vision = await FilesetResolver.forVisionTasks(
+      'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.32/wasm'
+    );
+    const detector = await ObjectDetector.createFromOptions(vision, {
+      baseOptions: {
+        modelAssetPath: 'https://storage.googleapis.com/mediapipe-assets/efficientdet_lite0.tflite'
+      },
+      scoreThreshold: 0.5,
+      runningMode: 'VIDEO'
+    });
+    objectDetectorRef.current = detector;
+    return detector;
   };
 
   const startGestureLoop = () => {
@@ -678,9 +1159,53 @@ function App() {
     detectFrameRef.current = requestAnimationFrame(detect);
   };
 
+  const startObjectLoop = () => {
+    const camera = cameraRef.current;
+    if (!camera) {
+      return;
+    }
+
+    const detect = async () => {
+      if (!cameraRef.current) {
+        return;
+      }
+      const now = performance.now();
+      if (now - lastObjectCheckRef.current >= OBJECT_POLL_MS) {
+        lastObjectCheckRef.current = now;
+        if (!objectInFlightRef.current) {
+          objectInFlightRef.current = true;
+          const start = Date.now();
+          try {
+            const detector = await ensureObjectDetector();
+            const results = detector.detectForVideo(cameraRef.current, now);
+            const detection = results.detections?.[0];
+            const category = detection?.categories?.[0];
+            if (category?.categoryName) {
+              setObjectStatus(`Object: ${category.categoryName}`);
+            } else {
+              setObjectStatus('Object: none');
+            }
+            setObjectLatency(Date.now() - start);
+          } catch {
+            setObjectStatus('Object detection failed.');
+            disableObjectDetection();
+          } finally {
+            objectInFlightRef.current = false;
+          }
+        }
+      }
+      detectFrameRef.current = requestAnimationFrame(detect);
+    };
+
+    detectFrameRef.current = requestAnimationFrame(detect);
+  };
+
   const enableGestures = async () => {
     if (gesturesEnabled) {
       return;
+    }
+    if (objectDetectionEnabled) {
+      disableObjectDetection();
     }
     try {
       const sessionId = ++gestureSessionRef.current;
@@ -716,11 +1241,52 @@ function App() {
       cancelAnimationFrame(detectFrameRef.current);
       detectFrameRef.current = null;
     }
-    if (cameraRef.current?.srcObject) {
+    if (cameraRef.current) {
       cameraRef.current.pause();
-      (cameraRef.current.srcObject as MediaStream).getTracks().forEach((t) => t.stop());
-      cameraRef.current.srcObject = null;
     }
+    stopCameraStream();
+  };
+
+  const enableObjectDetection = async () => {
+    if (objectDetectionEnabled) {
+      return;
+    }
+    if (gesturesEnabled) {
+      disableGestures();
+    }
+    try {
+      const sessionId = ++objectSessionRef.current;
+      setObjectStatus('Starting camera...');
+      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' } });
+      if (sessionId !== objectSessionRef.current) {
+        stream.getTracks().forEach((track) => track.stop());
+        return;
+      }
+      if (cameraRef.current) {
+        cameraRef.current.srcObject = stream;
+        await cameraRef.current.play();
+      }
+      setObjectDetectionEnabled(true);
+      setObjectStatus('Object detection on');
+      startObjectLoop();
+    } catch {
+      setObjectStatus('Camera permission blocked.');
+    }
+  };
+
+  const disableObjectDetection = () => {
+    objectSessionRef.current += 1;
+    setObjectDetectionEnabled(false);
+    setObjectStatus('');
+    setObjectLatency(null);
+    if (detectFrameRef.current) {
+      cancelAnimationFrame(detectFrameRef.current);
+      detectFrameRef.current = null;
+    }
+    if (cameraRef.current) {
+      cameraRef.current.pause();
+    }
+    stopCameraStream();
   };
 
   const stopRecording = () => {
@@ -826,6 +1392,62 @@ function App() {
             </div>
           </div>
         ) : null}
+        {keysOpen ? (
+          <div className="key-overlay" role="dialog" aria-modal="true">
+            <div className="key-card">
+              <div className="key-header">
+                <h2>API Keys</h2>
+                <button className="btn ghost" onClick={() => setKeysOpen(false)}>
+                  Close
+                </button>
+              </div>
+              <p>These are stored locally in your browser and sent to the local dev server.</p>
+              <div className="key-fields">
+                <label>
+                  <span>Odyssey</span>
+                  <input
+                    type="password"
+                    value={odysseyInput}
+                    onChange={(event) => setOdysseyInput(event.target.value)}
+                    placeholder="ody_..."
+                    autoComplete="off"
+                  />
+                </label>
+                <label>
+                  <span>Gemini</span>
+                  <input
+                    type="password"
+                    value={geminiInput}
+                    onChange={(event) => setGeminiInput(event.target.value)}
+                    placeholder="AIza..."
+                    autoComplete="off"
+                  />
+                </label>
+                <label>
+                  <span>Smallest</span>
+                  <input
+                    type="password"
+                    value={smallestInput}
+                    onChange={(event) => setSmallestInput(event.target.value)}
+                    placeholder="sm_..."
+                    autoComplete="off"
+                  />
+                </label>
+              </div>
+              {keysError ? <div className="error-box">{keysError}</div> : null}
+              {keysStatus ? <div className="status-line">{keysStatus}</div> : null}
+              <div className="key-actions">
+                <button className="btn ghost" onClick={() => setKeysOpen(false)}>
+                  Cancel
+                </button>
+                <button className="btn primary" onClick={handleSaveKeys} disabled={keysSaving}>
+                  {keysSaving ? 'Saving...' : 'Save keys'}
+                </button>
+              </div>
+              <p className="key-hint">In production, use server environment variables instead.</p>
+            </div>
+          </div>
+        ) : null}
       </div>
     );
   }
@@ -870,6 +1492,21 @@ function App() {
                 >
                   {gesturesEnabled ? 'Gestures on' : 'Gestures off'}
                 </button>
+                <button
+                  className={`btn ghost ${objectDetectionEnabled ? 'active' : ''}`}
+                  onClick={objectDetectionEnabled ? disableObjectDetection : enableObjectDetection}
+                >
+                  {objectDetectionEnabled ? 'Object detection on' : 'Object detection off'}
+                </button>
+                <button
+                  className="btn ghost"
+                  onClick={() => {
+                    setSettingsOpen(false);
+                    setKeysOpen(true);
+                  }}
+                >
+                  API keys
+                </button>
               </div>
             ) : null}
           </div>
@@ -888,6 +1525,10 @@ function App() {
             {gestureStatus ? <div className="speech-preview">{gestureStatus}</div> : null}
             {gestureLatency !== null ? (
               <div className="speech-preview">Gesture latency: {gestureLatency}ms + 600ms delay</div>
+            ) : null}
+            {objectStatus ? <div className="speech-preview">{objectStatus}</div> : null}
+            {objectLatency !== null ? (
+              <div className="speech-preview">Object latency: {objectLatency}ms</div>
             ) : null}
             {uploadError ? <div className="speech-preview speech-error">{uploadError}</div> : null}
             {error ? <div className="error-box">{error}</div> : null}
@@ -918,14 +1559,28 @@ function App() {
             <button className="btn ghost" onClick={handlePrev}>
               Back
             </button>
-            <button className="btn primary" onClick={handleNext}>
-              Next
-            </button>
-          </div>
-        </footer>
+          <button className="btn primary" onClick={handleNext}>
+            Next
+          </button>
+        </div>
+      </footer>
       </div>
 
       <video ref={cameraRef} className="camera-feed" playsInline muted />
+      {isCharacterAgentSlide ? (
+        <button
+          className={`voice-fab ${voiceStatus === 'connected' ? 'is-live' : ''}`}
+          onClick={startVoiceAgent}
+          disabled={voiceStatus === 'connecting'}
+        >
+          <span className="voice-dot" />
+          {voiceStatus === 'connected'
+            ? 'End call'
+            : voiceStatus === 'connecting'
+              ? 'Connecting...'
+              : `Talk to ${activeVoiceAgent?.label ?? 'agent'}`}
+        </button>
+      ) : null}
 
       {showKeyOverlay ? (
         <div className="key-overlay" role="dialog" aria-modal="true">
@@ -945,6 +1600,62 @@ function App() {
               </button>
             </div>
             <p className="key-hint">Key is loaded automatically from the server in production.</p>
+          </div>
+        </div>
+      ) : null}
+      {keysOpen ? (
+        <div className="key-overlay" role="dialog" aria-modal="true">
+          <div className="key-card">
+            <div className="key-header">
+              <h2>API Keys</h2>
+              <button className="btn ghost" onClick={() => setKeysOpen(false)}>
+                Close
+              </button>
+            </div>
+            <p>These are stored locally in your browser and sent to the local dev server.</p>
+            <div className="key-fields">
+              <label>
+                <span>Odyssey</span>
+                <input
+                  type="password"
+                  value={odysseyInput}
+                  onChange={(event) => setOdysseyInput(event.target.value)}
+                  placeholder="ody_..."
+                  autoComplete="off"
+                />
+              </label>
+              <label>
+                <span>Gemini</span>
+                <input
+                  type="password"
+                  value={geminiInput}
+                  onChange={(event) => setGeminiInput(event.target.value)}
+                  placeholder="AIza..."
+                  autoComplete="off"
+                />
+              </label>
+              <label>
+                <span>Smallest</span>
+                <input
+                  type="password"
+                  value={smallestInput}
+                  onChange={(event) => setSmallestInput(event.target.value)}
+                  placeholder="sm_..."
+                  autoComplete="off"
+                />
+              </label>
+            </div>
+            {keysError ? <div className="error-box">{keysError}</div> : null}
+            {keysStatus ? <div className="status-line">{keysStatus}</div> : null}
+            <div className="key-actions">
+              <button className="btn ghost" onClick={() => setKeysOpen(false)}>
+                Cancel
+              </button>
+              <button className="btn primary" onClick={handleSaveKeys} disabled={keysSaving}>
+                {keysSaving ? 'Saving...' : 'Save keys'}
+              </button>
+            </div>
+            <p className="key-hint">In production, use server environment variables instead.</p>
           </div>
         </div>
       ) : null}

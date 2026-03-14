@@ -257,6 +257,86 @@
           "cta": "Give a thumbs-up"
         }
       ]
+    },
+    {
+      "id": "characters",
+      "title": "Characters",
+      "subtitle": "8 scenes • Cast",
+      "poster": "/images/storybook-01.png",
+      "slides": [
+        {
+          "id": "characters-01",
+          "title": "Tom",
+          "subtitle": "Character 01",
+          "body": "Tom steps into the spotlight, bright-eyed and ready for adventure.",
+          "image": "/images/storybook-01.png",
+          "prompt": "Animate it",
+          "cta": "Animate it"
+        },
+        {
+          "id": "characters-02",
+          "title": "Albert Einstein",
+          "subtitle": "Character 02",
+          "body": "Albert Einstein appears with curious eyes and a mind full of ideas.",
+          "image": "/images/storybook-02.png",
+          "prompt": "Animate it",
+          "cta": "Animate it"
+        },
+        {
+          "id": "characters-03",
+          "title": "Alexander the Great",
+          "subtitle": "Character 03",
+          "body": "Alexander stands proud in armor, a fearless leader of legend.",
+          "image": "/images/storybook-03.png",
+          "prompt": "Animate it",
+          "cta": "Animate it"
+        },
+        {
+          "id": "characters-04",
+          "title": "Bear",
+          "subtitle": "Character 04",
+          "body": "A friendly bear smiles warmly, ready to join the story.",
+          "image": "/images/storybook-04.png",
+          "prompt": "Animate it",
+          "cta": "Animate it"
+        },
+        {
+          "id": "characters-05",
+          "title": "SpongeBob",
+          "subtitle": "Character 05",
+          "body": "SpongeBob beams with energy, bringing sunshine to the scene.",
+          "image": "/images/storybook-05.png",
+          "prompt": "Animate it",
+          "cta": "Animate it"
+        },
+        {
+          "id": "characters-06",
+          "title": "Cleopatra",
+          "subtitle": "Character 06",
+          "body": "Cleopatra arrives with regal poise and timeless elegance.",
+          "image": "/images/storybook-06.png",
+          "prompt": "Animate it",
+          "cta": "Animate it"
+        },
+        {
+          "id": "characters-07",
+          "title": "Circus Lion",
+          "subtitle": "Character 07",
+          "body": "A cheerful circus lion grins, ready for the big show.",
+          "image": "/images/storybook-07.png",
+          "prompt": "Animate it",
+          "cta": "Animate it"
+        },
+        {
+          "id": "characters-08",
+          "title": "George Washington",
+          "subtitle": "Character 08",
+          "body": "George Washington stands steady, a calm leader of history.",
+          "image": "/images/storybook-08.png",
+          "prompt": "Animate it",
+          "cta": "Animate it"
+        }
+      ]
     }
   ]
 }

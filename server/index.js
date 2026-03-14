@@ -57,26 +57,6 @@ app.use(
   })
 );
 
-// ─── Rate limiting ────────────────────────────────────────────────────────────
-const generalLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 150,
-  standardHeaders: true,
-  legacyHeaders: false,
-  message: { error: 'Too many requests, please try again later.' },
-});
-
-const aiLimiter = rateLimit({
-  windowMs: 60 * 1000,
-  max: 40,
-  standardHeaders: true,
-  legacyHeaders: false,
-  message: { error: 'Too many AI requests, please try again later.' },
-});
-
-app.use('/api/', generalLimiter);
-app.use(express.json({ limit: '10mb' }));
-
 // ─── Environment ──────────────────────────────────────────────────────────────
 const geminiApiKey = process.env.GEMINI_API_KEY || '';
 if (!geminiApiKey) {
@@ -88,7 +68,40 @@ if (!odysseyApiKey) {
   console.warn('[startup] Missing ODYSSEY_API_KEY');
 }
 
+const smallestApiKey = process.env.SMALLEST_API_KEY || '';
+if (!smallestApiKey) {
+  console.warn('[startup] Missing SMALLEST_API_KEY');
+}
+
+const runtimeConfig = {
+  geminiApiKey,
+  odysseyApiKey,
+  smallestApiKey
+};
+
+const isProduction = process.env.NODE_ENV === 'production' || Boolean(process.env.VERCEL);
+
 const model = 'gemini-2.0-flash';
+
+// ─── Rate limiting ────────────────────────────────────────────────────────────
+const generalLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 150,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many requests, please try again later.' },
+});
+
+const aiLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: isProduction ? 40 : 120,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many AI requests, please try again later.' },
+});
+
+app.use('/api/', generalLimiter);
+app.use(express.json({ limit: '10mb' }));
 
 // ─── Database (graceful fallback) ─────────────────────────────────────────────
 const DB_PATH = process.env.DATABASE_PATH || (process.env.VERCEL ? '/tmp/data.sqlite' : 'data.sqlite');
@@ -120,7 +133,8 @@ const upload = multer({
   limits: { fileSize: 10 * 1024 * 1024 }, // 10 MB
 });
 
-const getAiClient = () => (geminiApiKey ? new GoogleGenAI({ apiKey: geminiApiKey }) : null);
+const getAiClient = () => (runtimeConfig.geminiApiKey ? new GoogleGenAI({ apiKey: runtimeConfig.geminiApiKey }) : null);
+
 
 // ─── Routes ───────────────────────────────────────────────────────────────────
 
@@ -130,10 +144,52 @@ app.get('/api/health', (_req, res) => {
 
 // Odyssey token endpoint — serves API key to authenticated same-origin clients
 app.get('/api/odyssey/token', (_req, res) => {
-  if (!odysseyApiKey) {
+  if (!runtimeConfig.odysseyApiKey) {
     return res.status(503).json({ error: 'Odyssey not configured.' });
   }
-  return res.json({ apiKey: odysseyApiKey });
+  return res.json({ apiKey: runtimeConfig.odysseyApiKey });
+});
+
+app.get('/api/config', (_req, res) => {
+  if (isProduction) {
+    return res.status(404).json({ error: 'Not found.' });
+  }
+  return res.json({
+    ok: true,
+    configured: {
+      gemini: Boolean(runtimeConfig.geminiApiKey),
+      odyssey: Boolean(runtimeConfig.odysseyApiKey),
+      smallest: Boolean(runtimeConfig.smallestApiKey)
+    }
+  });
+});
+
+app.post('/api/config', (req, res) => {
+  if (isProduction) {
+    return res.status(404).json({ error: 'Not found.' });
+  }
+  const nextGemini = String(req.body?.geminiApiKey ?? '').trim();
+  const nextOdyssey = String(req.body?.odysseyApiKey ?? '').trim();
+  const nextSmallest = String(req.body?.smallestApiKey ?? '').trim();
+
+  if (nextGemini) {
+    runtimeConfig.geminiApiKey = nextGemini;
+  }
+  if (nextOdyssey) {
+    runtimeConfig.odysseyApiKey = nextOdyssey;
+  }
+  if (nextSmallest) {
+    runtimeConfig.smallestApiKey = nextSmallest;
+  }
+
+  return res.json({
+    ok: true,
+    configured: {
+      gemini: Boolean(runtimeConfig.geminiApiKey),
+      odyssey: Boolean(runtimeConfig.odysseyApiKey),
+      smallest: Boolean(runtimeConfig.smallestApiKey)
+    }
+  });
 });
 
 app.post('/api/log', (req, res) => {
@@ -168,7 +224,7 @@ app.get('/api/logs', (req, res) => {
 
 app.post('/api/stt', upload.single('audio'), async (req, res) => {
   try {
-    const smallestApiKey = process.env.SMALLEST_API_KEY;
+    const smallestApiKey = runtimeConfig.smallestApiKey;
     if (!smallestApiKey) return res.status(503).json({ error: 'STT service not configured.' });
     if (!req.file) return res.status(400).json({ error: 'Missing audio file.' });
 
@@ -188,6 +244,49 @@ app.post('/api/stt', upload.single('audio'), async (req, res) => {
     return res.json({ text });
   } catch {
     return res.status(500).json({ error: 'Transcription failed.' });
+  }
+});
+
+app.post('/api/smallest/webcall', aiLimiter, async (req, res) => {
+  try {
+    const smallestApiKey = runtimeConfig.smallestApiKey;
+    if (!smallestApiKey) {
+      return res.status(503).json({ error: 'Smallest AI not configured.' });
+    }
+    const agentId = String(req.body?.agentId ?? '').trim();
+    if (!agentId) {
+      return res.status(400).json({ error: 'Missing agentId.' });
+    }
+    console.log('[smallest] webcall request', { agentId });
+
+    const response = await fetch('https://atoms-api.smallest.ai/api/v1/conversation/webcall', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${smallestApiKey}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ agentId })
+    });
+
+    if (!response.ok) {
+      const message = await response.text();
+      console.error('[smallest] webcall failed', response.status, message);
+      return res.status(response.status).json({ error: 'Smallest webcall failed.', details: message });
+    }
+
+    const data = await response.json();
+    const payload = data?.data ?? data ?? {};
+    const accessToken = payload.accessToken || payload.access_token || payload.token || '';
+    const host = payload.host || payload.wssHost || payload.wsHost || '';
+    console.log('[smallest] webcall response', {
+      host,
+      tokenLen: accessToken ? accessToken.length : 0
+    });
+
+    return res.json({ accessToken, host, raw: data });
+  } catch (err) {
+    console.error('[smallest] webcall error', err);
+    return res.status(500).json({ error: 'Smallest webcall failed.' });
   }
 });
 
