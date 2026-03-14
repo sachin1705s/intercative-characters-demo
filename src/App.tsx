@@ -105,6 +105,12 @@ function App() {
   const [isTranscribing, setIsTranscribing] = useState(false);
   const [isListeningBrowser, setIsListeningBrowser] = useState(false);
   const [textPrompt, setTextPrompt] = useState('');
+  const [isCharacterRecording, setIsCharacterRecording] = useState(false);
+  const [isCharacterThinking, setIsCharacterThinking] = useState(false);
+  const [characterReply, setCharacterReply] = useState<string | null>(null);
+  const [characterError, setCharacterError] = useState<string | null>(null);
+  const [characterHistory, setCharacterHistory] = useState<Record<string, Array<{ role: 'user' | 'assistant'; content: string }>>>({});
+  const [midstreamPrompts, setMidstreamPrompts] = useState<string[]>([]);
   const [uploadImage, setUploadImage] = useState<File | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [gesturesEnabled, setGesturesEnabled] = useState(false);
@@ -134,6 +140,9 @@ function App() {
   const mediaStreamRef = useRef<MediaStream | null>(null);
   const odysseyStreamRef = useRef<MediaStream | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
+  const characterRecorderRef = useRef<MediaRecorder | null>(null);
+  const characterStreamRef = useRef<MediaStream | null>(null);
+  const characterChunksRef = useRef<Blob[]>([]);
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const cameraRef = useRef<HTMLVideoElement | null>(null);
@@ -156,7 +165,7 @@ function App() {
   const gestureSessionRef = useRef(0);
   const atomsClientRef = useRef<AtomsClient | null>(null);
   const isStreamingReadyRef = useRef(false);
-  const isCharacterAgentSlideRef = useRef(false);
+  const isVoiceAgentSlideRef = useRef(false);
   const lastVoiceActionAtRef = useRef(0);
   const handleInteractRef = useRef<(promptOverride?: string) => void>(() => undefined);
   const voiceAwaitTimerRef = useRef<number | null>(null);
@@ -168,20 +177,9 @@ function App() {
   const landingPosterUrl = encodeURI(activeStory?.poster ?? '/images/output (1).png');
   const slideCount = slides.length;
   const isUploadSlide = slide.id === 'make-your-magic';
-  const isCharacterAgentSlide = activeStory?.id === 'characters'
-    && [
-      'characters-01',
-      'characters-02',
-      'characters-03',
-      'characters-04',
-      'characters-05',
-      'characters-06',
-      'characters-07',
-      'characters-08'
-    ].includes(slide.id);
+  const isCharacterSlide = activeStory?.id === 'characters';
   const VOICE_AGENT_ID_BY_SLIDE: Record<string, { id: string; label: string }> = {
     'characters-01': { id: '69b29eee05aa521e4a898a1b', label: 'Tom' },
-    'characters-02': { id: '69b2d577323d8b893f9aa8b2', label: 'Albert Einstein' },
     'characters-03': { id: '69b2d9382f10ab5fd1f8b644', label: 'Alexander' },
     'characters-04': { id: '69b2da8c99e3585d551e0787', label: 'Bear' },
     'characters-05': { id: '69b2f1f2063891e15a90d098', label: 'SpongeBob' },
@@ -190,6 +188,9 @@ function App() {
     'characters-08': { id: '69b32b875e7d78b049089488', label: 'George Washington' }
   };
   const activeVoiceAgent = VOICE_AGENT_ID_BY_SLIDE[slide.id];
+  const isVoiceAgentSlide = Boolean(activeVoiceAgent);
+  const activeCharacterName = isCharacterSlide ? slide.title : 'Character';
+  const activeCharacterHistory = characterHistory[slide.id] ?? [];
   const slideCtaRef = useRef('');
 
 
@@ -230,12 +231,12 @@ function App() {
   }, [isStreamingReady]);
 
   useEffect(() => {
-    isCharacterAgentSlideRef.current = isCharacterAgentSlide;
-    if (!isCharacterAgentSlide && voiceStatus === 'connected') {
+    isVoiceAgentSlideRef.current = isVoiceAgentSlide;
+    if (!isVoiceAgentSlide && voiceStatus === 'connected') {
       atomsClientRef.current?.stopSession();
       setVoiceStatus('idle');
     }
-  }, [isCharacterAgentSlide, voiceStatus]);
+  }, [isVoiceAgentSlide, voiceStatus]);
 
   useEffect(() => {
     if (!isStreamingReady && voiceStatus === 'connected') {
@@ -246,11 +247,20 @@ function App() {
   }, [isStreamingReady, voiceStatus]);
 
   useEffect(() => {
-    if (voiceStatus === 'connected' && isCharacterAgentSlide) {
+    if (isCharacterSlide) {
+      return;
+    }
+    if (isCharacterRecording) {
+      stopCharacterRecording();
+    }
+  }, [isCharacterSlide, isCharacterRecording]);
+
+  useEffect(() => {
+    if (voiceStatus === 'connected' && isVoiceAgentSlide) {
       return;
     }
     stopVoiceCapture();
-  }, [voiceStatus, isCharacterAgentSlide]);
+  }, [voiceStatus, isVoiceAgentSlide]);
 
   useEffect(() => {
     if (!isStreamingReady) {
@@ -426,6 +436,13 @@ function App() {
 
   useEffect(() => {
     return () => {
+      characterRecorderRef.current?.stop();
+      characterStreamRef.current?.getTracks().forEach((track) => track.stop());
+    };
+  }, []);
+
+  useEffect(() => {
+    return () => {
       atomsClientRef.current?.stopSession();
     };
   }, []);
@@ -504,6 +521,7 @@ function App() {
     if (!prompt) {
       return;
     }
+    setMidstreamPrompts((prev) => [prompt, ...prev].slice(0, 6));
     serviceRef.current.interact(prompt).catch((err) => {
       setError(err instanceof Error ? err.message : String(err));
     });
@@ -609,7 +627,7 @@ function App() {
   };
 
   const handleVoiceTranscript = (data: { text?: string; topic?: string; type?: string; [key: string]: unknown }) => {
-    if (!isCharacterAgentSlideRef.current) {
+    if (!isVoiceAgentSlideRef.current) {
       return;
     }
     const text = String(data?.text ?? '').trim();
@@ -771,6 +789,133 @@ function App() {
       const message = err instanceof Error ? err.message : String(err);
       setVoiceError(message);
       setVoiceStatus('error');
+    }
+  };
+
+  const stopCharacterRecording = () => {
+    if (!isCharacterRecording) {
+      return;
+    }
+    characterRecorderRef.current?.stop();
+  };
+
+  const startCharacterRecording = async () => {
+    if (isCharacterRecording || isCharacterThinking) {
+      return;
+    }
+    if (!isStreamingReadyRef.current) {
+      setCharacterError('Start the stream first.');
+      return;
+    }
+    setCharacterError(null);
+    setCharacterReply(null);
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const recorder = new MediaRecorder(stream);
+      const slideId = slide.id;
+      const characterName = activeCharacterName;
+
+      characterStreamRef.current = stream;
+      characterRecorderRef.current = recorder;
+      characterChunksRef.current = [];
+
+      recorder.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+          characterChunksRef.current.push(event.data);
+        }
+      };
+
+      recorder.onstop = async () => {
+        setIsCharacterRecording(false);
+        setIsCharacterThinking(true);
+
+        const blob = new Blob(characterChunksRef.current, { type: recorder.mimeType || 'audio/webm' });
+        characterChunksRef.current = [];
+
+        try {
+          const form = new FormData();
+          form.append('audio', blob, 'character.webm');
+
+          const sttResponse = await fetch('/api/character/stt', {
+            method: 'POST',
+            body: form
+          });
+
+          if (!sttResponse.ok) {
+            let detail = '';
+            try {
+              const raw = await sttResponse.text();
+              if (raw) {
+                try {
+                  const data = JSON.parse(raw);
+                  detail = String(data?.details ?? data?.error ?? raw);
+                } catch {
+                  detail = raw;
+                }
+              }
+            } catch {
+              // ignore read errors
+            }
+            const statusLine = `STT failed (${sttResponse.status})`;
+            const message = detail ? `${statusLine}: ${detail}` : statusLine;
+            throw new Error(message);
+          }
+
+          const sttData = (await sttResponse.json()) as { text?: string };
+          const transcript = (sttData.text ?? '').trim();
+          if (!transcript) {
+            setCharacterError('We did not hear anything. Try again.');
+            return;
+          }
+
+          const history = (characterHistory[slideId] ?? []).slice(-6);
+          const chatResponse = await fetch('/api/character/chat', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ message: transcript, history, character: characterName })
+          });
+
+          if (!chatResponse.ok) {
+            throw new Error('Character response failed');
+          }
+
+          const chatData = await chatResponse.json() as {
+            reply?: string;
+            action?: string;
+            objects?: string[];
+          };
+
+          const reply = String(chatData.reply ?? '').trim() || 'Hmm, fascinating.';
+          const trimmedReply = reply.split(/\s+/).slice(0, 15).join(' ');
+          const action = String(chatData.action ?? '').trim() || 'nod thoughtfully and gesture gently';
+          const objects = Array.isArray(chatData.objects) ? chatData.objects.filter(Boolean).slice(0, 3) : [];
+
+          setCharacterReply(trimmedReply);
+          setCharacterHistory((prev) => ({
+            ...prev,
+            [slideId]: [
+              ...(prev[slideId] ?? []),
+              { role: 'user', content: transcript },
+              { role: 'assistant', content: trimmedReply }
+            ]
+          }));
+
+          const objectPrompt = objects.length ? ` Include ${objects.join(', ')} in the scene.` : '';
+          const streamPrompt = `${action}. Speak: "${trimmedReply}".${objectPrompt}`.trim();
+          handleInteractRef.current(streamPrompt);
+        } catch (err) {
+          setCharacterError(err instanceof Error ? err.message : 'Character flow failed.');
+        } finally {
+          setIsCharacterThinking(false);
+          characterStreamRef.current?.getTracks().forEach((track) => track.stop());
+          characterStreamRef.current = null;
+        }
+      };
+
+      setIsCharacterRecording(true);
+      recorder.start();
+    } catch (err) {
+      setCharacterError(err instanceof Error ? err.message : 'Microphone access was blocked.');
     }
   };
 
@@ -950,7 +1095,7 @@ function App() {
           if (transcript) {
             setSpeechText(transcript);
             handleInteract(transcript);
-            if (voiceStatus === 'connected' && isCharacterAgentSlideRef.current) {
+            if (voiceStatus === 'connected' && isVoiceAgentSlideRef.current) {
               setLastVoiceText(transcript);
               handleVoiceUtterance(transcript, 'stt');
             }
@@ -1512,6 +1657,29 @@ function App() {
           </div>
         </header>
 
+        {isCharacterSlide ? (
+          <aside className="einstein-chat">
+            <div className="einstein-chat-header">{activeCharacterName} Chat</div>
+            <div className="einstein-chat-body">
+              {activeCharacterHistory.slice(-8).map((msg, idx) => (
+                <div
+                  key={`${msg.role}-${idx}`}
+                  className={`einstein-chat-line ${msg.role === 'user' ? 'user' : 'assistant'}`}
+                >
+                  <span className="einstein-chat-role">{msg.role === 'user' ? 'You' : activeCharacterName}:</span>
+                  <span className="einstein-chat-text">{msg.content}</span>
+                </div>
+              ))}
+              {characterReply && !activeCharacterHistory.some((m) => m.content === characterReply) ? (
+                <div className="einstein-chat-line assistant">
+                  <span className="einstein-chat-role">{activeCharacterName}:</span>
+                  <span className="einstein-chat-text">{characterReply}</span>
+                </div>
+              ) : null}
+            </div>
+          </aside>
+        ) : null}
+
         <main className="slide-shell" />
 
         <footer className="story-bar">
@@ -1530,10 +1698,34 @@ function App() {
             {objectLatency !== null ? (
               <div className="speech-preview">Object latency: {objectLatency}ms</div>
             ) : null}
+            {isCharacterSlide ? (
+              <div className="speech-preview">
+                {isCharacterRecording
+                  ? `${activeCharacterName}: listening...`
+                  : isCharacterThinking
+                    ? `${activeCharacterName}: thinking...`
+                      : `${activeCharacterName}: ready.`}
+                {characterReply ? ` “${characterReply}”` : ''}
+              </div>
+            ) : null}
+            {characterError ? <div className="speech-preview speech-error">{characterError}</div> : null}
             {uploadError ? <div className="speech-preview speech-error">{uploadError}</div> : null}
             {error ? <div className="error-box">{error}</div> : null}
           </div>
           <div className="story-actions">
+            {isCharacterSlide ? (
+              <button
+                className="btn accent"
+                onClick={isCharacterRecording ? stopCharacterRecording : startCharacterRecording}
+                disabled={isCharacterThinking}
+              >
+                {isCharacterRecording
+                  ? 'Stop'
+                  : isCharacterThinking
+                    ? 'Thinking...'
+                      : `Talk to ${activeCharacterName}`}
+              </button>
+            ) : null}
             {isUploadSlide ? (
               <label className="upload-pill">
                 <input type="file" accept="image/*" onChange={handleUploadChange} />
@@ -1567,7 +1759,7 @@ function App() {
       </div>
 
       <video ref={cameraRef} className="camera-feed" playsInline muted />
-      {isCharacterAgentSlide ? (
+      {isVoiceAgentSlide ? (
         <button
           className={`voice-fab ${voiceStatus === 'connected' ? 'is-live' : ''}`}
           onClick={startVoiceAgent}
