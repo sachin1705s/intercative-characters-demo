@@ -179,13 +179,9 @@ function App() {
   const isUploadSlide = slide.id === 'make-your-magic';
   const isCharacterSlide = activeStory?.id === 'characters';
   const VOICE_AGENT_ID_BY_SLIDE: Record<string, { id: string; label: string }> = {
-    'characters-01': { id: '69b29eee05aa521e4a898a1b', label: 'Tom' },
-    'characters-03': { id: '69b2d9382f10ab5fd1f8b644', label: 'Alexander' },
-    'characters-04': { id: '69b2da8c99e3585d551e0787', label: 'Bear' },
-    'characters-05': { id: '69b2f1f2063891e15a90d098', label: 'SpongeBob' },
-    'characters-06': { id: '69b32a75cd4a50dca6a17dee', label: 'Cleopatra' },
     'characters-07': { id: '69b32b5ab57a92ad341f350d', label: 'Circus Lion' },
-    'characters-08': { id: '69b32b875e7d78b049089488', label: 'George Washington' }
+    'characters-02': { id: '', label: 'Albert Einstein' },
+    'characters-sudharshan': { id: '', label: 'Sudharshan Kamath' }
   };
   const activeVoiceAgent = VOICE_AGENT_ID_BY_SLIDE[slide.id];
   const isVoiceAgentSlide = Boolean(activeVoiceAgent);
@@ -583,33 +579,43 @@ function App() {
   };
 
   const SLIDE_RANDOM_ACTIONS: Record<string, string[]> = {
-    'characters-01': [
-      'do hello',
+    'characters-07': [
       'do hello',
       'do thumbs up',
       'do victory sign',
-      'do a playful dance',
+      'do a playful circus trick',
+      'roar proudly',
       'say hey and wave'
     ],
-    'characters-04': [
-      'do a sleepy yawn',
-      'lie down and pretend to sleep',
-      'do a gentle dance',
-      'do a friendly wave'
+    'characters-02': [
+      'do hello',
+      'do a thoughtful pose',
+      'write an equation in the air',
+      'do thumbs up'
+    ],
+    'characters-sudharshan': [
+      'do hello',
+      'do thumbs up',
+      'do a confident wave',
+      'do victory sign'
     ]
   };
 
   const SLIDE_RANDOM_OBJECTS: Record<string, string[]> = {
-    'characters-01': [
-      'a slice of cheese',
-      'a tiny bell',
-      'a red balloon'
+    'characters-07': [
+      'a circus ball',
+      'a juggling pin',
+      'a rubber chicken'
     ],
-    'characters-04': [
-      'a honeycomb',
-      'a buzzing bee',
-      'a pair of bees',
-      'a soft thought bubble with honey'
+    'characters-02': [
+      'a chalkboard',
+      'a telescope',
+      'a swirling galaxy'
+    ],
+    'characters-sudharshan': [
+      'a microphone',
+      'a soundwave',
+      'a glowing AI chip'
     ]
   };
 
