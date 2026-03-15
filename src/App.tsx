@@ -50,7 +50,6 @@ type SpeechRecognitionLike = {
 };
 
 const stories = (slidesData as { stories: Story[] }).stories;
-const STORAGE_KEY = 'odyssey_api_key';
 const GESTURE_DELAY_MS = 600;
 const GEMINI_GESTURE_COOLDOWN_MS = 1700;
 const VISION_POLL_MS = 1700;
@@ -63,22 +62,6 @@ const GESTURE_PROMPTS: Record<GestureLabel, string> = {
   namaste: 'do namaste'
 };
 
-const safeStorage = {
-  get(key: string) {
-    try {
-      return localStorage.getItem(key);
-    } catch {
-      return null;
-    }
-  },
-  set(key: string, value: string) {
-    try {
-      localStorage.setItem(key, value);
-    } catch {
-      // ignore
-    }
-  }
-};
 
 function getSpeechRecognition(): (new () => SpeechRecognitionLike) | null {
   const win = window as typeof window & {
@@ -90,8 +73,6 @@ function getSpeechRecognition(): (new () => SpeechRecognitionLike) | null {
 
 function App() {
   const [apiKey, setApiKey] = useState<string | undefined>(undefined);
-  const [keyLoading, setKeyLoading] = useState(true);
-  const [keyInput, setKeyInput] = useState('');
   const [showLanding, setShowLanding] = useState(true);
   const [selectedStory, setSelectedStory] = useState<string | null>(stories[0]?.id ?? null);
   const [index, setIndex] = useState(0);
@@ -129,13 +110,6 @@ function App() {
   const [lastVoiceActionAt, setLastVoiceActionAt] = useState<number | null>(null);
   const [lastVoiceSource, setLastVoiceSource] = useState<string | null>(null);
   const [lastVoiceHint, setLastVoiceHint] = useState<string | null>(null);
-  const [keysOpen, setKeysOpen] = useState(false);
-  const [odysseyInput, setOdysseyInput] = useState('');
-  const [geminiInput, setGeminiInput] = useState('');
-  const [smallestInput, setSmallestInput] = useState('');
-  const [keysStatus, setKeysStatus] = useState<string | null>(null);
-  const [keysError, setKeysError] = useState<string | null>(null);
-  const [keysSaving, setKeysSaving] = useState(false);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const mediaStreamRef = useRef<MediaStream | null>(null);
   const odysseyStreamRef = useRef<MediaStream | null>(null);
@@ -169,6 +143,7 @@ function App() {
   const lastVoiceActionAtRef = useRef(0);
   const handleInteractRef = useRef<(promptOverride?: string) => void>(() => undefined);
   const voiceAwaitTimerRef = useRef<number | null>(null);
+  const ttsAudioCtxRef = useRef<AudioContext | null>(null);
 
   const activeStory = stories.find((story) => story.id === selectedStory) ?? stories[0];
   const slides = activeStory?.slides ?? [];
@@ -191,36 +166,13 @@ function App() {
 
 
   useEffect(() => {
-    // Try fetching the key from the backend first (production)
     fetch('/api/odyssey/token')
       .then((r) => r.ok ? r.json() : null)
       .then((data) => {
-        if (data?.apiKey) {
-          setApiKey(data.apiKey);
-          return;
-        }
-        // Fall back to localStorage (dev / manual entry)
-        const storedKey = safeStorage.get(STORAGE_KEY);
-        if (storedKey) setApiKey(storedKey);
+        if (data?.apiKey) setApiKey(data.apiKey);
       })
-      .catch(() => {
-        const storedKey = safeStorage.get(STORAGE_KEY);
-        if (storedKey) setApiKey(storedKey);
-      })
-      .finally(() => setKeyLoading(false));
+      .catch(() => {});
   }, []);
-
-  useEffect(() => {
-    if (!keysOpen) {
-      return;
-    }
-    const storedKey = apiKey ?? safeStorage.get(STORAGE_KEY) ?? '';
-    setOdysseyInput(storedKey);
-    setGeminiInput('');
-    setSmallestInput('');
-    setKeysStatus(null);
-    setKeysError(null);
-  }, [keysOpen, apiKey]);
 
   useEffect(() => {
     isStreamingReadyRef.current = isStreamingReady;
@@ -298,7 +250,7 @@ function App() {
 
   useEffect(() => {
     if (!apiKey) {
-      setError('Missing Odyssey API key. Add it in the overlay or set ODYSSEY_API_KEY in your environment.');
+      setError('Missing Odyssey API key. Set ODYSSEY_API_KEY in your server environment.');
       return;
     }
 
@@ -308,16 +260,21 @@ function App() {
     service
       .connect({
         onConnected: (stream) => {
+          console.log('[odyssey] onConnected — stream:', stream);
           odysseyStreamRef.current = stream;
           if (videoRef.current) {
             videoRef.current.srcObject = stream;
-            videoRef.current.play().catch(() => undefined);
+            videoRef.current.play().catch((e) => console.warn('[odyssey] video.play failed:', e));
+          } else {
+            console.warn('[odyssey] onConnected but videoRef is null');
           }
         },
         onStatusChange: (status) => {
+          console.log('[odyssey] status:', status);
           setConnectionStatus(status);
         },
         onStreamStarted: () => {
+          console.log('[odyssey] onStreamStarted');
           setStreamState('streaming');
           setIsStreamingReady(true);
           if (pendingGestureRef.current) {
@@ -327,19 +284,24 @@ function App() {
           }
         },
         onStreamEnded: () => {
+          console.log('[odyssey] onStreamEnded');
           setStreamState('ended');
           setIsStreamingReady(false);
         },
         onStreamError: (reason, message) => {
+          console.error('[odyssey] onStreamError:', reason, message);
           setStreamState('error');
           setIsStreamingReady(false);
-          if (reason === 'moderation_failed') {
+          const r = typeof reason === 'string' ? reason : JSON.stringify(reason);
+          const m = typeof message === 'string' ? message : JSON.stringify(message);
+          if (r === 'moderation_failed') {
             setError(null);
             return;
           }
-          setError(`${reason}: ${message}`);
+          setError(`${r}: ${m}`);
         },
         onError: (err) => {
+          console.error('[odyssey] onError:', err);
           setStreamState('error');
           setIsStreamingReady(false);
           if (err.message?.includes('moderation_failed')) {
@@ -389,7 +351,9 @@ function App() {
       if (requestIdRef.current !== requestId) {
         return;
       }
-      await service.startStream({ prompt: slide.prompt, image: file, portrait: false });
+      console.log('[odyssey] calling startStream — slide:', slide.id, '| prompt:', slide.prompt?.slice(0, 60));
+      await service.startStream({ prompt: slide.prompt, image: file, portrait: slide.id === 'characters-sudharshan' });
+      console.log('[odyssey] startStream resolved');
     };
 
     run().catch((err) => {
@@ -805,16 +769,87 @@ function App() {
     characterRecorderRef.current?.stop();
   };
 
+  const playCharacterTTS = async (text: string) => {
+    const ctx = ttsAudioCtxRef.current;
+    console.log('[tts] playCharacterTTS called, text:', text.slice(0, 80));
+    console.log('[tts] AudioContext state:', ctx ? ctx.state : 'null (no ctx)');
+    if (!ctx) return;
+    try {
+      await ctx.resume();
+      console.log('[tts] AudioContext resumed, state:', ctx.state);
+      const ttsRes = await fetch('/api/character/tts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text })
+      });
+      console.log('[tts] server response status:', ttsRes.status, ttsRes.statusText);
+      console.log('[tts] content-type:', ttsRes.headers.get('content-type'));
+      if (!ttsRes.ok) {
+        const errBody = await ttsRes.text();
+        console.error('[tts] server error body:', errBody);
+        return;
+      }
+      const arrayBuffer = await ttsRes.arrayBuffer();
+      console.log('[tts] arrayBuffer size:', arrayBuffer.byteLength, 'bytes');
+      if (arrayBuffer.byteLength < 200) {
+        const text = new TextDecoder().decode(arrayBuffer);
+        console.warn('[tts] suspiciously small buffer — raw content:', text);
+      }
+      const decoded = await ctx.decodeAudioData(arrayBuffer);
+      console.log('[tts] decoded audio duration:', decoded.duration.toFixed(2), 's');
+      const source = ctx.createBufferSource();
+      source.buffer = decoded;
+      source.connect(ctx.destination);
+      source.start();
+      console.log('[tts] audio playback started');
+    } catch (err) {
+      console.error('[tts] error', err);
+    }
+  };
+
+  const runCharacterInteraction = async (userText: string, slideId: string, characterName: string) => {
+    const history = (characterHistory[slideId] ?? []).slice(-6);
+    const chatResponse = await fetch('/api/character/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message: userText, history, character: characterName })
+    });
+    if (!chatResponse.ok) throw new Error('Character response failed');
+
+    const chatData = await chatResponse.json() as { reply?: string; action?: string; objects?: string[] };
+    const reply = String(chatData.reply ?? '').trim() || 'Hmm, fascinating.';
+    const trimmedReply = reply.split(/\s+/).slice(0, 15).join(' ');
+    const action = String(chatData.action ?? '').trim() || 'nod thoughtfully and gesture gently';
+    const objects = Array.isArray(chatData.objects) ? chatData.objects.filter(Boolean).slice(0, 3) : [];
+
+    setCharacterReply(trimmedReply);
+    setCharacterHistory((prev) => ({
+      ...prev,
+      [slideId]: [
+        ...(prev[slideId] ?? []),
+        { role: 'user', content: userText },
+        { role: 'assistant', content: trimmedReply }
+      ]
+    }));
+
+    const objectPrompt = objects.length ? ` Include ${objects.join(', ')} in the scene.` : '';
+    const streamPrompt = `${action}.${objectPrompt}`.trim();
+    handleInteractRef.current(streamPrompt);
+    playCharacterTTS(trimmedReply);
+  };
+
   const startCharacterRecording = async () => {
     if (isCharacterRecording || isCharacterThinking) {
       return;
     }
-    if (!isStreamingReadyRef.current) {
-      setCharacterError('Start the stream first.');
-      return;
-    }
     setCharacterError(null);
     setCharacterReply(null);
+    // Unlock AudioContext during user gesture so TTS can play after async awaits
+    if (!ttsAudioCtxRef.current) {
+      ttsAudioCtxRef.current = new AudioContext();
+    } else {
+      ttsAudioCtxRef.current.resume();
+    }
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       const recorder = new MediaRecorder(stream);
@@ -874,41 +909,7 @@ function App() {
             return;
           }
 
-          const history = (characterHistory[slideId] ?? []).slice(-6);
-          const chatResponse = await fetch('/api/character/chat', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ message: transcript, history, character: characterName })
-          });
-
-          if (!chatResponse.ok) {
-            throw new Error('Character response failed');
-          }
-
-          const chatData = await chatResponse.json() as {
-            reply?: string;
-            action?: string;
-            objects?: string[];
-          };
-
-          const reply = String(chatData.reply ?? '').trim() || 'Hmm, fascinating.';
-          const trimmedReply = reply.split(/\s+/).slice(0, 15).join(' ');
-          const action = String(chatData.action ?? '').trim() || 'nod thoughtfully and gesture gently';
-          const objects = Array.isArray(chatData.objects) ? chatData.objects.filter(Boolean).slice(0, 3) : [];
-
-          setCharacterReply(trimmedReply);
-          setCharacterHistory((prev) => ({
-            ...prev,
-            [slideId]: [
-              ...(prev[slideId] ?? []),
-              { role: 'user', content: transcript },
-              { role: 'assistant', content: trimmedReply }
-            ]
-          }));
-
-          const objectPrompt = objects.length ? ` Include ${objects.join(', ')} in the scene.` : '';
-          const streamPrompt = `${action}. Speak: "${trimmedReply}".${objectPrompt}`.trim();
-          handleInteractRef.current(streamPrompt);
+          await runCharacterInteraction(transcript, slideId, characterName);
         } catch (err) {
           setCharacterError(err instanceof Error ? err.message : 'Character flow failed.');
         } finally {
@@ -953,68 +954,22 @@ function App() {
       });
   };
 
-  const handleSaveKey = () => {
-    const trimmed = keyInput.trim();
-    if (!trimmed) {
-      setError('Please enter a valid Odyssey API key.');
-      return;
-    }
-    safeStorage.set(STORAGE_KEY, trimmed);
-    setApiKey(trimmed);
-    setKeyInput('');
-    setError(null);
-  };
-
-  const handleSaveKeys = async () => {
-    const trimmedOdyssey = odysseyInput.trim();
-    const trimmedGemini = geminiInput.trim();
-    const trimmedSmallest = smallestInput.trim();
-    if (!trimmedOdyssey && !trimmedGemini && !trimmedSmallest) {
-      setKeysError('Enter at least one key to save.');
-      return;
-    }
-    setKeysSaving(true);
-    setKeysError(null);
-    setKeysStatus(null);
-    try {
-      const response = await fetch('/api/config', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          odysseyApiKey: trimmedOdyssey,
-          geminiApiKey: trimmedGemini,
-          smallestApiKey: trimmedSmallest
-        })
-      });
-
-      if (!response.ok) {
-        const message = response.status === 404
-          ? 'Server key updates are disabled in production.'
-          : 'Failed to save keys.';
-        throw new Error(message);
-      }
-
-      if (trimmedOdyssey) {
-        safeStorage.set(STORAGE_KEY, trimmedOdyssey);
-        setApiKey(trimmedOdyssey);
-        setKeyInput('');
-      }
-
-      setKeysStatus('Saved. Restart the dev server if a key still shows as missing.');
-    } catch (err) {
-      setKeysError(err instanceof Error ? err.message : 'Failed to save keys.');
-    } finally {
-      setKeysSaving(false);
-    }
-  };
-
   const handleTextPromptSubmit = () => {
     const prompt = textPrompt.trim();
     if (!prompt) {
       return;
     }
-    handleInteract(prompt);
     setTextPrompt('');
+    if (isCharacterSlide) {
+      if (!ttsAudioCtxRef.current) {
+        ttsAudioCtxRef.current = new AudioContext();
+      } else {
+        ttsAudioCtxRef.current.resume();
+      }
+      runCharacterInteraction(prompt, slide.id, activeCharacterName).catch(() => {});
+    } else {
+      handleInteract(prompt);
+    }
   };
 
   const handleTextPromptKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
@@ -1460,8 +1415,6 @@ function App() {
     }
   };
 
-  const showKeyOverlay = !keyLoading && !apiKey;
-
   const handleSelectStory = (id: string) => {
     setSelectedStory(id);
   };
@@ -1522,83 +1475,6 @@ function App() {
             <span className="search-label">Powered by Odyssey</span>
           </div>
         </div>
-        {showKeyOverlay ? (
-          <div className="key-overlay" role="dialog" aria-modal="true">
-            <div className="key-card">
-              <h2>Enter Odyssey API Key</h2>
-              <p>We store it locally in your browser for this device.</p>
-              <div className="key-input">
-                <input
-                  type="password"
-                  value={keyInput}
-                  onChange={(event) => setKeyInput(event.target.value)}
-                  placeholder="ody_..."
-                  autoComplete="off"
-                />
-                <button className="btn primary" onClick={handleSaveKey}>
-                  Save & Connect
-                </button>
-              </div>
-              <p className="key-hint">Key is loaded automatically from the server in production.</p>
-            </div>
-          </div>
-        ) : null}
-        {keysOpen ? (
-          <div className="key-overlay" role="dialog" aria-modal="true">
-            <div className="key-card">
-              <div className="key-header">
-                <h2>API Keys</h2>
-                <button className="btn ghost" onClick={() => setKeysOpen(false)}>
-                  Close
-                </button>
-              </div>
-              <p>These are stored locally in your browser and sent to the local dev server.</p>
-              <div className="key-fields">
-                <label>
-                  <span>Odyssey</span>
-                  <input
-                    type="password"
-                    value={odysseyInput}
-                    onChange={(event) => setOdysseyInput(event.target.value)}
-                    placeholder="ody_..."
-                    autoComplete="off"
-                  />
-                </label>
-                <label>
-                  <span>Gemini</span>
-                  <input
-                    type="password"
-                    value={geminiInput}
-                    onChange={(event) => setGeminiInput(event.target.value)}
-                    placeholder="AIza..."
-                    autoComplete="off"
-                  />
-                </label>
-                <label>
-                  <span>Smallest</span>
-                  <input
-                    type="password"
-                    value={smallestInput}
-                    onChange={(event) => setSmallestInput(event.target.value)}
-                    placeholder="sm_..."
-                    autoComplete="off"
-                  />
-                </label>
-              </div>
-              {keysError ? <div className="error-box">{keysError}</div> : null}
-              {keysStatus ? <div className="status-line">{keysStatus}</div> : null}
-              <div className="key-actions">
-                <button className="btn ghost" onClick={() => setKeysOpen(false)}>
-                  Cancel
-                </button>
-                <button className="btn primary" onClick={handleSaveKeys} disabled={keysSaving}>
-                  {keysSaving ? 'Saving...' : 'Save keys'}
-                </button>
-              </div>
-              <p className="key-hint">In production, use server environment variables instead.</p>
-            </div>
-          </div>
-        ) : null}
       </div>
     );
   }
@@ -1648,15 +1524,6 @@ function App() {
                   onClick={objectDetectionEnabled ? disableObjectDetection : enableObjectDetection}
                 >
                   {objectDetectionEnabled ? 'Object detection on' : 'Object detection off'}
-                </button>
-                <button
-                  className="btn ghost"
-                  onClick={() => {
-                    setSettingsOpen(false);
-                    setKeysOpen(true);
-                  }}
-                >
-                  API keys
                 </button>
               </div>
             ) : null}
@@ -1780,83 +1647,6 @@ function App() {
         </button>
       ) : null}
 
-      {showKeyOverlay ? (
-        <div className="key-overlay" role="dialog" aria-modal="true">
-          <div className="key-card">
-            <h2>Enter Odyssey API Key</h2>
-            <p>We store it locally in your browser for this device.</p>
-            <div className="key-input">
-              <input
-                type="password"
-                value={keyInput}
-                onChange={(event) => setKeyInput(event.target.value)}
-                placeholder="ody_..."
-                autoComplete="off"
-              />
-              <button className="btn primary" onClick={handleSaveKey}>
-                Save & Connect
-              </button>
-            </div>
-            <p className="key-hint">Key is loaded automatically from the server in production.</p>
-          </div>
-        </div>
-      ) : null}
-      {keysOpen ? (
-        <div className="key-overlay" role="dialog" aria-modal="true">
-          <div className="key-card">
-            <div className="key-header">
-              <h2>API Keys</h2>
-              <button className="btn ghost" onClick={() => setKeysOpen(false)}>
-                Close
-              </button>
-            </div>
-            <p>These are stored locally in your browser and sent to the local dev server.</p>
-            <div className="key-fields">
-              <label>
-                <span>Odyssey</span>
-                <input
-                  type="password"
-                  value={odysseyInput}
-                  onChange={(event) => setOdysseyInput(event.target.value)}
-                  placeholder="ody_..."
-                  autoComplete="off"
-                />
-              </label>
-              <label>
-                <span>Gemini</span>
-                <input
-                  type="password"
-                  value={geminiInput}
-                  onChange={(event) => setGeminiInput(event.target.value)}
-                  placeholder="AIza..."
-                  autoComplete="off"
-                />
-              </label>
-              <label>
-                <span>Smallest</span>
-                <input
-                  type="password"
-                  value={smallestInput}
-                  onChange={(event) => setSmallestInput(event.target.value)}
-                  placeholder="sm_..."
-                  autoComplete="off"
-                />
-              </label>
-            </div>
-            {keysError ? <div className="error-box">{keysError}</div> : null}
-            {keysStatus ? <div className="status-line">{keysStatus}</div> : null}
-            <div className="key-actions">
-              <button className="btn ghost" onClick={() => setKeysOpen(false)}>
-                Cancel
-              </button>
-              <button className="btn primary" onClick={handleSaveKeys} disabled={keysSaving}>
-                {keysSaving ? 'Saving...' : 'Save keys'}
-              </button>
-            </div>
-            <p className="key-hint">In production, use server environment variables instead.</p>
-          </div>
-        </div>
-      ) : null}
       <canvas ref={canvasRef} className="camera-feed" />
     </div>
   );

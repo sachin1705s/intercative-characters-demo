@@ -457,6 +457,55 @@ app.post('/api/character/chat', aiLimiter, async (req, res) => {
   }
 });
 
+app.post('/api/character/tts', async (req, res) => {
+  try {
+    const smallestApiKey = runtimeConfig.smallestApiKey;
+    if (!smallestApiKey) return res.status(503).json({ error: 'TTS service not configured.' });
+    const text = String(req.body?.text ?? '').trim();
+    if (!text) return res.status(400).json({ error: 'Missing text.' });
+
+    console.log('[character/tts] request text:', text.slice(0, 80));
+    const response = await fetch('https://api.smallest.ai/waves/v1/lightning-v3.1/get_speech', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${smallestApiKey}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        text,
+        model: 'lightning-v3.1',
+        voice_id: 'jordan',
+        sample_rate: 24000,
+        speed: 1,
+        language: 'en',
+        output_format: 'wav'
+      })
+    });
+
+    console.log('[character/tts] Smallest AI status:', response.status, response.statusText);
+    console.log('[character/tts] response headers:', Object.fromEntries(response.headers.entries()));
+
+    if (!response.ok) {
+      const message = await response.text();
+      console.error('[character/tts] Smallest AI error body:', message);
+      return res.status(500).json({ error: 'TTS failed.', details: message });
+    }
+
+    const buffer = Buffer.from(await response.arrayBuffer());
+    console.log('[character/tts] audio buffer size:', buffer.length, 'bytes');
+    console.log('[character/tts] first 16 bytes (hex):', buffer.slice(0, 16).toString('hex'));
+    console.log('[character/tts] first 16 bytes (ascii):', buffer.slice(0, 16).toString('ascii').replace(/[^\x20-\x7E]/g, '.'));
+    if (buffer.length < 100) {
+      console.error('[character/tts] suspiciously small buffer — full content:', buffer.toString());
+    }
+    res.setHeader('Content-Type', 'audio/wav');
+    return res.send(buffer);
+  } catch (err) {
+    console.error('[character/tts] exception:', err);
+    return res.status(500).json({ error: 'TTS failed.' });
+  }
+});
+
 // Backwards compatibility
 app.post('/api/einstein/stt', upload.single('audio'), (req, res) => {
   req.url = '/api/character/stt';
@@ -477,7 +526,7 @@ app.post('/api/einstein/tts', async (req, res) => {
     const voiceModel = 'lightning-v3.1';
     const voiceId = 'jordan';
 
-    const endpoint = 'https://waves-api.smallest.ai/api/v1/lightning/get_speech';
+    const endpoint = 'https://api.smallest.ai/waves/v1/lightning-v3.1/get_speech';
 
     const response = await fetch(endpoint, {
       method: 'POST',
@@ -487,10 +536,11 @@ app.post('/api/einstein/tts', async (req, res) => {
       },
       body: JSON.stringify({
         text,
+        model: voiceModel,
         voice_id: voiceId,
         sample_rate: 24000,
         speed: 1,
-        language: 'auto',
+        language: 'en',
         output_format: 'wav'
       })
     });
