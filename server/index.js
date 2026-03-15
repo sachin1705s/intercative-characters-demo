@@ -397,7 +397,9 @@ app.post('/api/character/chat', aiLimiter, async (req, res) => {
     const prompt = promptByCharacter[character] || `You are ${character}, friendly and engaging.`;
     const systemPrompt = [
       prompt,
-      'Keep responses to about 10-15 words.',
+      'When telling a story or explaining, use up to 40 words.',
+      'Do not avoid detail when explaining; use the full 40 words if helpful.',
+      'If not explaining, keep it brief (under 15 words).',
       'Use scene actions when something visual or funny should happen.',
       'Return JSON only with keys: reply, action, objects.',
       'reply = the speech you say. action = a short string of SCENE_ACTION tags to perform.',
@@ -413,7 +415,7 @@ app.post('/api/character/chat', aiLimiter, async (req, res) => {
     const response = await ai.models.generateContent({
       model: characterModel,
       generationConfig: {
-        maxOutputTokens: 60
+        maxOutputTokens: 160
       },
       contents: [{ role: 'user', parts: contentParts }],
     });
@@ -445,6 +447,14 @@ app.post('/api/character/chat', aiLimiter, async (req, res) => {
       const sceneTags = raw.match(/\[SCENE_ACTION:[^\]]+\]/g) || [];
       action = sceneTags.join(' ').trim();
       reply = raw.replace(/\[SCENE_ACTION:[^\]]+\]/g, '').replace(/\s+/g, ' ').trim();
+    }
+
+    const embeddedSceneTags = reply.match(/\[SCENE_ACTION:[^\]]+\]/g) || [];
+    if (embeddedSceneTags.length) {
+      if (!action) {
+        action = embeddedSceneTags.join(' ').trim();
+      }
+      reply = reply.replace(/\[SCENE_ACTION:[^\]]+\]/g, '').replace(/\s+/g, ' ').trim();
     }
 
     if (!reply) {
