@@ -133,6 +133,12 @@ const upload = multer({
   limits: { fileSize: 10 * 1024 * 1024 }, // 10 MB
 });
 
+// Larger limit for voice clone samples (up to 50 MB to support high-quality recordings)
+const uploadVoiceClone = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 50 * 1024 * 1024 },
+});
+
 const getAiClient = () => (runtimeConfig.geminiApiKey ? new GoogleGenAI({ apiKey: runtimeConfig.geminiApiKey }) : null);
 
 
@@ -457,6 +463,65 @@ app.post('/api/character/chat', aiLimiter, async (req, res) => {
   }
 });
 
+// ─── Voice cloning ────────────────────────────────────────────────────────────
+app.post('/api/voice-clone', uploadVoiceClone.single('audio'), async (req, res) => {
+  try {
+    const smallestApiKey = runtimeConfig.smallestApiKey;
+    if (!smallestApiKey) return res.status(503).json({ error: 'TTS service not configured.' });
+    if (!req.file) return res.status(400).json({ error: 'No audio file provided.' });
+
+    const name = String(req.body?.name ?? `clone-${Date.now()}`).trim().slice(0, 64) || `clone-${Date.now()}`;
+    const mime = req.file.mimetype || 'audio/webm';
+    const filename = req.file.originalname || `voice_sample.webm`;
+    console.log('[voice-clone] size:', req.file.size, 'bytes | name:', name, '| mime:', mime, '| filename:', filename);
+
+    const formData = new FormData();
+    const audioBlob = new Blob([req.file.buffer], { type: mime });
+    formData.append('file', audioBlob, filename);
+    formData.append('displayName', name);
+
+    console.log('[voice-clone] POSTing to Smallest AI...');
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 60000); // 60s timeout
+    let response;
+    try {
+      response = await fetch('https://api.smallest.ai/waves/v1/lightning-large/add_voice', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${smallestApiKey}` },
+        body: formData,
+        signal: controller.signal,
+      });
+    } finally {
+      clearTimeout(timeout);
+    }
+
+    console.log('[voice-clone] Smallest AI status:', response.status, response.statusText);
+
+    if (!response.ok) {
+      const message = await response.text();
+      console.error('[voice-clone] error body:', message);
+      let userMessage = 'Voice cloning failed.';
+      try {
+        const parsed = JSON.parse(message);
+        if (parsed.error_code === 'voice_clone_timeout') userMessage = 'Voice cloning timed out on the server. Please try again.';
+        else if (parsed.error) userMessage = parsed.error;
+      } catch {}
+      return res.status(500).json({ error: userMessage, details: message });
+    }
+
+    const data = await response.json();
+    console.log('[voice-clone] response:', JSON.stringify(data));
+    const voiceId = data.id ?? data.voice_id ?? data.voiceId ?? data.data?.voiceId ?? data.data?.id ?? data.data?.voice_id;
+    if (!voiceId) {
+      return res.status(500).json({ error: 'Voice cloning response missing voice ID.', raw: data });
+    }
+    return res.json({ voiceId, name });
+  } catch (err) {
+    console.error('[voice-clone] exception:', err);
+    return res.status(500).json({ error: 'Voice cloning failed.' });
+  }
+});
+
 app.post('/api/character/tts', async (req, res) => {
   try {
     const smallestApiKey = runtimeConfig.smallestApiKey;
@@ -464,8 +529,14 @@ app.post('/api/character/tts', async (req, res) => {
     const text = String(req.body?.text ?? '').trim();
     if (!text) return res.status(400).json({ error: 'Missing text.' });
 
-    console.log('[character/tts] request text:', text.slice(0, 80));
-    const response = await fetch('https://api.smallest.ai/waves/v1/lightning-v3.1/get_speech', {
+    // Cloned voices are tied to lightning-large; built-in voices use lightning-v3.1
+    const voiceId = String(req.body?.voiceId ?? '').trim() || 'jordan';
+    const isClonedVoice = voiceId.startsWith('voice_');
+    const model = isClonedVoice ? 'lightning-large' : 'lightning-v3.1';
+    const endpoint = `https://api.smallest.ai/waves/v1/${model}/get_speech`;
+
+    console.log('[character/tts] request text:', text.slice(0, 80), '| voice_id:', voiceId, '| model:', model);
+    const response = await fetch(endpoint, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${smallestApiKey}`,
@@ -473,8 +544,8 @@ app.post('/api/character/tts', async (req, res) => {
       },
       body: JSON.stringify({
         text,
-        model: 'lightning-v3.1',
-        voice_id: 'jordan',
+        model,
+        voice_id: voiceId,
         sample_rate: 24000,
         speed: 1,
         language: 'en',
