@@ -89,6 +89,7 @@ function App() {
   const [isCharacterRecording, setIsCharacterRecording] = useState(false);
   const [isCharacterThinking, setIsCharacterThinking] = useState(false);
   const [characterReply, setCharacterReply] = useState<string | null>(null);
+  const [characterSources, setCharacterSources] = useState<{ title: string; url: string }[]>([]);
   const [characterError, setCharacterError] = useState<string | null>(null);
   const [characterHistory, setCharacterHistory] = useState<Record<string, Array<{ role: 'user' | 'assistant'; content: string }>>>({});
   const [uploadImage, setUploadImage] = useState<File | null>(null);
@@ -126,6 +127,8 @@ function App() {
   const objectInFlightRef = useRef(false);
   const imageCacheRef = useRef<Map<string, File>>(new Map());
   const pendingGestureRef = useRef<GestureLabel | null>(null);
+  const retryStreamRef = useRef<(() => Promise<void>) | null>(null);
+  const moderationRetryCountRef = useRef(0);
   const pendingTimerRef = useRef<number | null>(null);
   const lastGeminiAtRef = useRef(0);
   const lastVisionCheckRef = useRef(0);
@@ -165,7 +168,9 @@ function App() {
   const VOICE_AGENT_ID_BY_SLIDE: Record<string, { id: string; label: string }> = {
     'characters-07': { id: '69b32b5ab57a92ad341f350d', label: 'Circus Lion' },
     'characters-02': { id: '', label: 'Albert Einstein' },
-    'characters-sudharshan': { id: '', label: 'Sudharshan Kamath' }
+    'characters-sudharshan': { id: '', label: 'Sudharshan Kamath' },
+    'characters-farza': { id: '', label: 'Farza' },
+    'characters-dan-shipper': { id: '', label: 'Dan Shipper' }
   };
   const activeVoiceAgent = VOICE_AGENT_ID_BY_SLIDE[slide.id];
   const isVoiceAgentSlide = Boolean(activeVoiceAgent);
@@ -238,12 +243,15 @@ function App() {
         onConnected: (stream) => {
           console.log('[odyssey] onConnected — stream:', stream);
           odysseyStreamRef.current = stream;
-          if (videoRef.current) {
-            videoRef.current.srcObject = stream;
-            videoRef.current.play().catch((e) => console.warn('[odyssey] video.play failed:', e));
-          } else {
-            console.warn('[odyssey] onConnected but videoRef is null');
-          }
+          const attach = () => {
+            if (videoRef.current) {
+              videoRef.current.srcObject = stream;
+              videoRef.current.play().catch((e) => console.warn('[odyssey] video.play failed:', e));
+            } else {
+              setTimeout(attach, 100);
+            }
+          };
+          attach();
         },
         onStatusChange: (status) => {
           console.log('[odyssey] status:', status);
@@ -271,7 +279,20 @@ function App() {
           const r = typeof reason === 'string' ? reason : JSON.stringify(reason);
           const m = typeof message === 'string' ? message : JSON.stringify(message);
           if (r === 'moderation_failed') {
-            setError(null);
+            if (moderationRetryCountRef.current < 3 && retryStreamRef.current) {
+              moderationRetryCountRef.current++;
+              console.log(`[odyssey] moderation_failed — retrying (attempt ${moderationRetryCountRef.current})`);
+              setStreamState('starting');
+              const retry = retryStreamRef.current;
+              setTimeout(() => {
+                retry().catch(() => {
+                  setStreamState('error');
+                  setIsStreamingReady(false);
+                });
+              }, 1000);
+            } else {
+              setError(null);
+            }
             return;
           }
           setError(`${r}: ${m}`);
@@ -309,6 +330,7 @@ function App() {
     }
 
     const requestId = ++requestIdRef.current;
+    moderationRetryCountRef.current = 0;
     setStreamState('starting');
     setIsStreamingReady(false);
     setError(null);
@@ -316,6 +338,7 @@ function App() {
     const run = async () => {
       await service.endStream().catch(() => undefined);
       if (isUploadSlide) {
+        retryStreamRef.current = null;
         setStreamState('idle');
         return;
       }
@@ -327,8 +350,10 @@ function App() {
       if (requestIdRef.current !== requestId) {
         return;
       }
+      const streamOptions = { prompt: slide.prompt, image: file, portrait: slide.id === 'characters-sudharshan' };
+      retryStreamRef.current = () => service.startStream(streamOptions);
       console.log('[odyssey] calling startStream — slide:', slide.id, '| prompt:', slide.prompt?.slice(0, 60));
-      await service.startStream({ prompt: slide.prompt, image: file, portrait: slide.id === 'characters-sudharshan' });
+      await service.startStream(streamOptions);
       console.log('[odyssey] startStream resolved');
     };
 
@@ -702,7 +727,7 @@ function App() {
       const ttsRes = await fetch('/api/character/tts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text, ...(clonedVoiceId ? { voiceId: clonedVoiceId } : {}) })
+        body: JSON.stringify({ text, character: activeCharacterName, ...(clonedVoiceId ? { voiceId: clonedVoiceId } : {}) })
       });
       console.log('[tts] server response status:', ttsRes.status, ttsRes.statusText);
       console.log('[tts] content-type:', ttsRes.headers.get('content-type'));
@@ -731,20 +756,27 @@ function App() {
 
   const runCharacterInteraction = async (userText: string, slideId: string, characterName: string) => {
     const history = (characterHistory[slideId] ?? []).slice(-6);
+    const SEARCH_TRIGGERS = [
+      'today', 'current', 'latest', 'recent', 'news', 'now',
+      'price', 'stock', 'weather', 'who is', 'what is', 'when did',
+      'score', 'happened', '2024', '2025', '2026',
+    ];
+    const enableSearch = SEARCH_TRIGGERS.some((kw) => userText.toLowerCase().includes(kw));
     const chatResponse = await fetch('/api/character/chat', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ message: userText, history, character: characterName })
+      body: JSON.stringify({ message: userText, history, character: characterName, enableSearch })
     });
     if (!chatResponse.ok) throw new Error('Character response failed');
 
-    const chatData = await chatResponse.json() as { reply?: string; action?: string; objects?: string[] };
+    const chatData = await chatResponse.json() as { reply?: string; action?: string; objects?: string[]; sources?: { title: string; url: string }[] };
     const reply = String(chatData.reply ?? '').trim() || 'Hmm, fascinating.';
     const trimmedReply = reply.split(/\s+/).slice(0, 40).join(' ');
     const action = String(chatData.action ?? '').trim() || 'nod thoughtfully and gesture gently';
     const objects = Array.isArray(chatData.objects) ? chatData.objects.filter(Boolean).slice(0, 3) : [];
 
     setCharacterReply(trimmedReply);
+    setCharacterSources(Array.isArray(chatData.sources) ? chatData.sources : []);
     setCharacterHistory((prev) => ({
       ...prev,
       [slideId]: [
@@ -1591,6 +1623,13 @@ function App() {
                 <div className="einstein-chat-line assistant">
                   <span className="einstein-chat-role">{activeCharacterName}:</span>
                   <span className="einstein-chat-text">{characterReply}</span>
+                  {characterSources.length > 0 && (
+                    <div className="chat-sources">
+                      {characterSources.map((s, i) => (
+                        <a key={i} href={s.url} target="_blank" rel="noopener noreferrer" className="chat-source-link">{s.title}</a>
+                      ))}
+                    </div>
+                  )}
                 </div>
               ) : null}
             </div>

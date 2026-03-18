@@ -3,7 +3,7 @@
     {
       "id": "characters",
       "title": "Characters",
-      "subtitle": "3 scenes • Cast",
+      "subtitle": "4 scenes • Cast",
       "poster": "/images/storybook-07.png",
       "slides": [
         {
@@ -30,6 +30,24 @@
           "subtitle": "Character 03",
           "body": "Sudharshan Kamath, co-founder of Smallest.ai, building the future of voice AI.",
           "image": "/images/storybook-08.png",
+          "prompt": "Animate it",
+          "cta": "Animate it"
+        },
+        {
+          "id": "characters-dan-shipper",
+          "title": "Dan Shipper",
+          "subtitle": "Character 05",
+          "body": "Dan Shipper, co-founder of Every — writer, builder, and thinker on AI and the future of work.",
+          "image": "/images/Dan Shipper.png",
+          "prompt": "Animate it",
+          "cta": "Animate it"
+        },
+        {
+          "id": "characters-farza",
+          "title": "Farza",
+          "subtitle": "Character 04",
+          "body": "Farza Majeed — founder of Buildspace, obsessed with helping builders ship their ideas.",
+          "image": "/images/Farza.png",
           "prompt": "Animate it",
           "cta": "Animate it"
         }
