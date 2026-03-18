@@ -91,7 +91,6 @@ function App() {
   const [characterReply, setCharacterReply] = useState<string | null>(null);
   const [characterError, setCharacterError] = useState<string | null>(null);
   const [characterHistory, setCharacterHistory] = useState<Record<string, Array<{ role: 'user' | 'assistant'; content: string }>>>({});
-  const [midstreamPrompts, setMidstreamPrompts] = useState<string[]>([]);
   const [uploadImage, setUploadImage] = useState<File | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [gesturesEnabled, setGesturesEnabled] = useState(false);
@@ -209,39 +208,6 @@ function App() {
     }
     stopVoiceCapture();
   }, [voiceStatus, isVoiceAgentSlide]);
-
-  useEffect(() => {
-    if (!isStreamingReady) {
-      return;
-    }
-    const slideId = slide.id;
-    const hasRandoms = Boolean(SLIDE_RANDOM_ACTIONS[slideId]?.length || SLIDE_RANDOM_OBJECTS[slideId]?.length);
-    if (!hasRandoms) {
-      return;
-    }
-
-    let cancelled = false;
-    const minDelay = 7000;
-    const maxDelay = 14000;
-
-    const scheduleNext = () => {
-      if (cancelled) return;
-      const delay = Math.floor(Math.random() * (maxDelay - minDelay + 1)) + minDelay;
-      window.setTimeout(() => {
-        if (cancelled || !isStreamingReadyRef.current) return;
-        const prompt = getRandomPromptForSlide(slideId);
-        if (prompt) {
-          handleInteractRef.current(prompt);
-        }
-        scheduleNext();
-      }, delay);
-    };
-
-    scheduleNext();
-    return () => {
-      cancelled = true;
-    };
-  }, [isStreamingReady, slide.id]);
 
   useEffect(() => {
     slideCtaRef.current = slide.cta;
@@ -481,7 +447,6 @@ function App() {
     if (!prompt) {
       return;
     }
-    setMidstreamPrompts((prev) => [prompt, ...prev].slice(0, 6));
     serviceRef.current.interact(prompt).catch((err) => {
       setError(err instanceof Error ? err.message : String(err));
     });
@@ -542,59 +507,6 @@ function App() {
     return null;
   };
 
-  const SLIDE_RANDOM_ACTIONS: Record<string, string[]> = {
-    'characters-07': [
-      'do hello',
-      'do thumbs up',
-      'do victory sign',
-      'do a playful circus trick',
-      'roar proudly',
-      'say hey and wave'
-    ],
-    'characters-02': [
-      'do hello',
-      'do a thoughtful pose',
-      'write an equation in the air',
-      'do thumbs up'
-    ],
-    'characters-sudharshan': [
-      'do hello',
-      'do thumbs up',
-      'do a confident wave',
-      'do victory sign'
-    ]
-  };
-
-  const SLIDE_RANDOM_OBJECTS: Record<string, string[]> = {
-    'characters-07': [
-      'a circus ball',
-      'a juggling pin',
-      'a rubber chicken'
-    ],
-    'characters-02': [
-      'a chalkboard',
-      'a telescope',
-      'a swirling galaxy'
-    ],
-    'characters-sudharshan': [
-      'a microphone',
-      'a soundwave',
-      'a glowing AI chip'
-    ]
-  };
-
-  const getRandomPromptForSlide = (slideId: string) => {
-    const actions = SLIDE_RANDOM_ACTIONS[slideId] ?? [];
-    const objects = SLIDE_RANDOM_OBJECTS[slideId] ?? [];
-    const action = actions.length ? actions[Math.floor(Math.random() * actions.length)] : null;
-    const object = objects.length ? objects[Math.floor(Math.random() * objects.length)] : null;
-    if (action && object) {
-      return `${action}. Include ${object} in the scene.`;
-    }
-    if (action) return action;
-    if (object) return `Include ${object} in the scene.`;
-    return null;
-  };
 
   const handleVoiceTranscript = (data: { text?: string; topic?: string; type?: string; [key: string]: unknown }) => {
     if (!isVoiceAgentSlideRef.current) {
@@ -818,7 +730,7 @@ function App() {
 
     const chatData = await chatResponse.json() as { reply?: string; action?: string; objects?: string[] };
     const reply = String(chatData.reply ?? '').trim() || 'Hmm, fascinating.';
-    const trimmedReply = reply.split(/\s+/).slice(0, 15).join(' ');
+    const trimmedReply = reply.split(/\s+/).slice(0, 40).join(' ');
     const action = String(chatData.action ?? '').trim() || 'nod thoughtfully and gesture gently';
     const objects = Array.isArray(chatData.objects) ? chatData.objects.filter(Boolean).slice(0, 3) : [];
 
