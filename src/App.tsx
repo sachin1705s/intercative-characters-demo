@@ -143,6 +143,16 @@ function App() {
   const handleInteractRef = useRef<(promptOverride?: string) => void>(() => undefined);
   const voiceAwaitTimerRef = useRef<number | null>(null);
   const ttsAudioCtxRef = useRef<AudioContext | null>(null);
+  const [clonedVoiceId, setClonedVoiceId] = useState<string | null>(null);
+  const [voiceCloneStatus, setVoiceCloneStatus] = useState<'idle' | 'recording' | 'uploading' | 'ready' | 'error'>('idle');
+  const [voiceCloneError, setVoiceCloneError] = useState<string | null>(null);
+  const [voiceCloneDuration, setVoiceCloneDuration] = useState(0);
+  const [showVoiceClone, setShowVoiceClone] = useState(false);
+  const voiceCloneRecorderRef = useRef<MediaRecorder | null>(null);
+  const voiceCloneStreamRef = useRef<MediaStream | null>(null);
+  const voiceCloneChunksRef = useRef<Blob[]>([]);
+  const voiceCloneStartRef = useRef<number>(0);
+  const voiceCloneDurationTimerRef = useRef<number | null>(null);
 
   const activeStory = stories.find((story) => story.id === selectedStory) ?? stories[0];
   const slides = activeStory?.slides ?? [];
@@ -692,7 +702,7 @@ function App() {
       const ttsRes = await fetch('/api/character/tts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text })
+        body: JSON.stringify({ text, ...(clonedVoiceId ? { voiceId: clonedVoiceId } : {}) })
       });
       console.log('[tts] server response status:', ttsRes.status, ttsRes.statusText);
       console.log('[tts] content-type:', ttsRes.headers.get('content-type'));
@@ -837,6 +847,122 @@ function App() {
       setCharacterError(err instanceof Error ? err.message : 'Microphone access was blocked.');
     }
   };
+
+  // ─── Voice Cloning ─────────────────────────────────────────────────────────
+
+  const submitVoiceClone = async (blob: Blob, mimeType: string) => {
+    setVoiceCloneStatus('uploading');
+    setVoiceCloneError(null);
+    try {
+      const formData = new FormData();
+      const ext = mimeType.includes('wav') ? 'wav' : mimeType.includes('ogg') ? 'ogg' : mimeType.includes('mp') ? 'mp3' : 'webm';
+      formData.append('audio', blob, `voice_sample.${ext}`);
+      formData.append('name', `my-voice-${Date.now()}`);
+      const res = await fetch('/api/voice-clone', { method: 'POST', body: formData });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: 'Upload failed.' })) as { error?: string };
+        throw new Error(err.error ?? 'Voice clone failed.');
+      }
+      const data = await res.json() as { voiceId: string };
+      setClonedVoiceId(data.voiceId);
+      setVoiceCloneStatus('ready');
+    } catch (err) {
+      setVoiceCloneError(err instanceof Error ? err.message : 'Voice clone failed.');
+      setVoiceCloneStatus('error');
+    }
+  };
+
+  const stopVoiceCloneRecording = () => {
+    if (voiceCloneRecorderRef.current?.state === 'recording') {
+      voiceCloneRecorderRef.current.stop();
+    }
+    if (voiceCloneDurationTimerRef.current) {
+      window.clearInterval(voiceCloneDurationTimerRef.current);
+      voiceCloneDurationTimerRef.current = null;
+    }
+  };
+
+  const startVoiceCloneRecording = async () => {
+    if (voiceCloneStatus === 'recording') {
+      stopVoiceCloneRecording();
+      return;
+    }
+    setVoiceCloneError(null);
+    setVoiceCloneDuration(0);
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: { sampleRate: 44100, channelCount: 1, echoCancellation: true, noiseSuppression: true },
+      });
+      voiceCloneStreamRef.current = stream;
+      voiceCloneChunksRef.current = [];
+      const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=pcm')
+        ? 'audio/webm;codecs=pcm'
+        : MediaRecorder.isTypeSupported('audio/webm')
+          ? 'audio/webm'
+          : '';
+      const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : {});
+      voiceCloneRecorderRef.current = recorder;
+
+      recorder.ondataavailable = (e) => { if (e.data.size > 0) voiceCloneChunksRef.current.push(e.data); };
+      recorder.onstop = () => {
+        voiceCloneStreamRef.current?.getTracks().forEach((t) => t.stop());
+        voiceCloneStreamRef.current = null;
+        if (voiceCloneDurationTimerRef.current) {
+          window.clearInterval(voiceCloneDurationTimerRef.current);
+          voiceCloneDurationTimerRef.current = null;
+        }
+        const blob = new Blob(voiceCloneChunksRef.current, { type: recorder.mimeType || 'audio/webm' });
+        voiceCloneChunksRef.current = [];
+        const duration = (Date.now() - voiceCloneStartRef.current) / 1000;
+        if (duration < 10) {
+          setVoiceCloneError(`Recording too short (${duration.toFixed(1)}s). Please record at least 10 seconds.`);
+          setVoiceCloneStatus('error');
+          return;
+        }
+        submitVoiceClone(blob, recorder.mimeType || 'audio/webm');
+      };
+
+      voiceCloneStartRef.current = Date.now();
+      recorder.start();
+      setVoiceCloneStatus('recording');
+      voiceCloneDurationTimerRef.current = window.setInterval(() => {
+        const elapsed = Math.floor((Date.now() - voiceCloneStartRef.current) / 1000);
+        setVoiceCloneDuration(elapsed);
+        // Auto-stop at 15 seconds (SDK maximum)
+        if (elapsed >= 15) {
+          if (voiceCloneRecorderRef.current?.state === 'recording') {
+            voiceCloneRecorderRef.current.stop();
+          }
+        }
+      }, 500);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (msg.includes('not found') || msg.includes('NotFoundError')) {
+        setVoiceCloneError('No microphone found. Please connect a mic or use "Upload audio" instead.');
+      } else if (msg.includes('Permission') || msg.includes('NotAllowed')) {
+        setVoiceCloneError('Microphone access denied. Allow mic access in your browser settings.');
+      } else {
+        setVoiceCloneError(msg || 'Microphone access blocked.');
+      }
+      setVoiceCloneStatus('error');
+    }
+  };
+
+  const handleVoiceCloneFile = (file: File) => {
+    const supported = ['audio/wav', 'audio/mp3', 'audio/mpeg', 'audio/webm', 'audio/ogg'];
+    if (!supported.includes(file.type)) {
+      setVoiceCloneError('Unsupported format. Please upload a WAV, MP3, WebM, or OGG file (not M4A/AAC).');
+      return;
+    }
+    if (file.size > 50 * 1024 * 1024) {
+      setVoiceCloneError('File too large (max 50MB).');
+      return;
+    }
+    setVoiceCloneError(null);
+    submitVoiceClone(file, file.type);
+  };
+
+  // ───────────────────────────────────────────────────────────────────────────
 
   const startUploadStream = (file: File) => {
     if (!serviceRef.current || connectionStatus !== 'connected') {
@@ -1437,6 +1563,12 @@ function App() {
                 >
                   {objectDetectionEnabled ? 'Object detection on' : 'Object detection off'}
                 </button>
+                <button
+                  className={`btn ghost ${clonedVoiceId ? 'active' : ''}`}
+                  onClick={() => { setShowVoiceClone((p) => !p); setSettingsOpen(false); }}
+                >
+                  {clonedVoiceId ? 'Voice cloned ✓' : 'Clone voice'}
+                </button>
               </div>
             ) : null}
           </div>
@@ -1544,22 +1676,72 @@ function App() {
       </div>
 
       <video ref={cameraRef} className="camera-feed" playsInline muted />
-      {isVoiceAgentSlide ? (
-        <button
-          className={`voice-fab ${voiceStatus === 'connected' ? 'is-live' : ''}`}
-          onClick={startVoiceAgent}
-          disabled={voiceStatus === 'connecting'}
-        >
-          <span className="voice-dot" />
-          {voiceStatus === 'connected'
-            ? 'End call'
-            : voiceStatus === 'connecting'
-              ? 'Connecting...'
-              : `Talk to ${activeVoiceAgent?.label ?? 'agent'}`}
-        </button>
-      ) : null}
 
       <canvas ref={canvasRef} className="camera-feed" />
+
+      {showVoiceClone ? (
+        <div className="voice-clone-panel">
+          <div className="voice-clone-inner">
+            <div className="voice-clone-header">
+              <span>Clone Your Voice</span>
+              <button className="btn ghost voice-clone-close" onClick={() => setShowVoiceClone(false)}>✕</button>
+            </div>
+            <p className="voice-clone-hint">
+              Record or upload between <strong>10–15 seconds</strong> of your voice.
+              It will be used to power the character TTS.
+            </p>
+
+            {clonedVoiceId ? (
+              <div className="voice-clone-success">
+                Voice cloned! Your voice is now active for TTS.
+                <button
+                  className="btn ghost"
+                  style={{ marginTop: 8 }}
+                  onClick={() => { setClonedVoiceId(null); setVoiceCloneStatus('idle'); setVoiceCloneDuration(0); }}
+                >
+                  Remove clone
+                </button>
+              </div>
+            ) : (
+              <>
+                <div className="voice-clone-actions">
+                  <button
+                    className={`btn accent ${voiceCloneStatus === 'recording' ? 'active' : ''}`}
+                    onClick={startVoiceCloneRecording}
+                    disabled={voiceCloneStatus === 'uploading'}
+                  >
+                    {voiceCloneStatus === 'recording'
+                      ? `Stop (${voiceCloneDuration}s)`
+                      : voiceCloneStatus === 'uploading'
+                        ? 'Processing...'
+                        : 'Record voice'}
+                  </button>
+                  <label className="upload-pill">
+                    <input
+                      type="file"
+                      accept="audio/wav,audio/mp3,audio/mpeg,audio/webm,audio/ogg,.wav,.mp3,.webm,.ogg"
+                      onChange={(e) => { const f = e.target.files?.[0]; if (f) handleVoiceCloneFile(f); e.target.value = ''; }}
+                      disabled={voiceCloneStatus === 'recording' || voiceCloneStatus === 'uploading'}
+                    />
+                    <span>Upload audio</span>
+                  </label>
+                </div>
+                {voiceCloneStatus === 'recording' && (
+                  <div className="voice-clone-timer">
+                    {voiceCloneDuration < 10
+                      ? `Keep recording… ${10 - voiceCloneDuration}s to minimum`
+                      : voiceCloneDuration < 15
+                        ? `${voiceCloneDuration}s — tap Stop (auto-stops at 15s)`
+                        : 'Finalising…'}
+                  </div>
+                )}
+              </>
+            )}
+
+            {voiceCloneError ? <div className="voice-clone-error">{voiceCloneError}</div> : null}
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

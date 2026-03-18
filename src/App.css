@@ -488,6 +488,84 @@
   pointer-events: none;
 }
 
+/* ─── Voice Clone Panel ─────────────────────────────────────────────────── */
+.voice-clone-panel {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(4px);
+}
+
+.voice-clone-inner {
+  background: rgba(12, 16, 24, 0.92);
+  border: 1px solid var(--stroke);
+  border-radius: 16px;
+  padding: 28px 28px 24px;
+  max-width: 400px;
+  width: 90%;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  box-shadow: 0 8px 40px rgba(0,0,0,0.5);
+}
+
+.voice-clone-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: var(--fg);
+}
+
+.voice-clone-close {
+  padding: 2px 8px;
+  font-size: 0.9rem;
+}
+
+.voice-clone-hint {
+  font-size: 0.85rem;
+  color: var(--fg-muted, rgba(255,255,255,0.6));
+  margin: 0;
+  line-height: 1.5;
+}
+
+.voice-clone-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.voice-clone-timer {
+  font-size: 0.82rem;
+  color: rgba(255, 200, 100, 0.9);
+  padding: 6px 0 2px;
+}
+
+.voice-clone-success {
+  display: flex;
+  flex-direction: column;
+  font-size: 0.88rem;
+  color: rgba(100, 220, 130, 0.95);
+  background: rgba(100, 220, 130, 0.08);
+  border: 1px solid rgba(100, 220, 130, 0.25);
+  border-radius: 8px;
+  padding: 10px 12px;
+}
+
+.voice-clone-error {
+  font-size: 0.82rem;
+  color: rgba(255, 120, 100, 0.95);
+  background: rgba(255, 100, 80, 0.08);
+  border: 1px solid rgba(255, 100, 80, 0.25);
+  border-radius: 8px;
+  padding: 8px 12px;
+}
+
 
 @media (max-width: 960px) {
   .ui {
