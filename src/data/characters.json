@@ -1,0 +1,94 @@
+{
+  "characters": [
+    {
+      "id": "alexander",
+      "title": "Alexander",
+      "subtitle": "Character 01",
+      "body": "Alexander the Great, bold strategist and fearless leader.",
+      "image": "/images/characters/Alexander.png",
+      "prompt": "Animate it",
+      "cta": "Animate it"
+    },
+    {
+      "id": "bear",
+      "title": "Steve the Bear",
+      "subtitle": "Character 02",
+      "body": "A wise, gentle bear with a warm, storytime presence.",
+      "image": "/images/characters/bear.png",
+      "prompt": "Animate it",
+      "cta": "Animate it"
+    },
+    {
+      "id": "circus-lion",
+      "title": "Circus Lion",
+      "subtitle": "Character 03",
+      "body": "A cheerful circus lion grins, ready for the big show.",
+      "image": "/images/characters/circus lion.png",
+      "prompt": "Animate it",
+      "cta": "Animate it"
+    },
+    {
+      "id": "cleopetra",
+      "title": "Cleopatra",
+      "subtitle": "Character 04",
+      "body": "Cleopatra, the last Pharaoh, regal and strategic.",
+      "image": "/images/characters/cleopetra.png",
+      "prompt": "Animate it",
+      "cta": "Animate it"
+    },
+    {
+      "id": "da-vinci",
+      "title": "Da Vinci",
+      "subtitle": "Character 05",
+      "body": "Leonardo da Vinci, artist-inventor with boundless curiosity.",
+      "image": "/images/characters/da vinci.png",
+      "prompt": "Animate it",
+      "cta": "Animate it"
+    },
+    {
+      "id": "einstein",
+      "title": "Albert Einstein",
+      "subtitle": "Character 06",
+      "body": "Albert Einstein appears with curious eyes and a mind full of ideas.",
+      "image": "/images/characters/einstein.png",
+      "prompt": "Animate it",
+      "cta": "Animate it"
+    },
+    {
+      "id": "grandpa-turtle",
+      "title": "Grandpa Turtle",
+      "subtitle": "Character 07",
+      "body": "Grandpa Turtle, slow and thoughtful, sharing patient wisdom.",
+      "image": "/images/characters/gradpa turtle.png",
+      "prompt": "Animate it",
+      "cta": "Animate it"
+    },
+    {
+      "id": "squirral",
+      "title": "Pico the Squiarral",
+      "subtitle": "Character 08",
+      "body": "A quick, curious squirrel ready for playful antics.",
+      "image": "/images/characters/squirral.jpeg",
+      "prompt": "Animate it",
+      "cta": "Animate it"
+    },
+    {
+      "id": "steve-jobs",
+      "title": "Steve Jobs",
+      "subtitle": "Character 09",
+      "body": "Steve Jobs, minimalist visionary obsessed with product and craft.",
+      "image": "/images/characters/steve jobs.png",
+      "prompt": "Animate it",
+      "cta": "Animate it"
+    },
+    {
+      "id": "tesla",
+      "title": "Nikola Tesla",
+      "subtitle": "Character 10",
+      "body": "Nikola Tesla, inventive and electric, thinking in currents and systems.",
+      "image": "/images/characters/tesla.png",
+      "prompt": "Animate it",
+      "cta": "Animate it"
+    }
+  ]
+}

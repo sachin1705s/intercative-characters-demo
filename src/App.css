@@ -1,3 +1,5 @@
+@import url('https://fonts.googleapis.com/css2?family=Fraunces:wght@300;400;600;700&family=Work+Sans:wght@300;400;500;600;700&display=swap');
+
 .app {
   position: relative;
   min-height: 100vh;
@@ -66,55 +68,6 @@
   gap: 24px;
 }
 
-.landing {
-  position: relative;
-  z-index: 1;
-  min-height: 100vh;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  gap: 28px;
-  padding: 48px clamp(24px, 6vw, 80px);
-}
-
-.landing-bg {
-  filter: blur(10px) brightness(0.6) saturate(1.1);
-}
-
-.landing-header {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.landing-subtitle {
-  margin: 0;
-  color: var(--muted);
-  max-width: 48ch;
-}
-
-.landing-search {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  margin-top: 6px;
-}
-
-.search-line {
-  flex: 1;
-  height: 10px;
-  border-radius: 999px;
-  background: linear-gradient(90deg, rgba(255, 255, 255, 0.35), rgba(255, 255, 255, 0.05));
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
-}
-
-.search-label {
-  font-family: 'IBM Plex Mono', monospace;
-  font-size: 0.7rem;
-  letter-spacing: 0.2em;
-  text-transform: uppercase;
-  color: var(--muted);
-}
 
 .eyebrow {
   margin: 0;
@@ -592,6 +545,23 @@
   padding: 8px 12px;
 }
 
+.landing-shell {
+  background: var(--mist) !important;
+  color: var(--ink);
+}
+
+.landing-shell .btn.primary {
+  background: var(--forest-soft);
+  border-color: transparent;
+  color: #f4f1e9;
+}
+
+.landing-shell .btn.ghost {
+  background: rgba(255, 255, 255, 0.65);
+  border-color: rgba(15, 27, 25, 0.12);
+  color: var(--forest-soft);
+}
+
 
 @media (max-width: 960px) {
   .ui {
@@ -749,4 +719,387 @@
 .voice-fab:disabled {
   opacity: 0.6;
   cursor: not-allowed;
+}
+
+:root {
+  color-scheme: light;
+  --forest: #0c1f1c;
+  --forest-soft: #16312d;
+  --mist: #f3f1ec;
+  --leaf: #3f6d4f;
+  --sun: #e6c27a;
+  --stone: #e7e4dd;
+  --ink: #0f1b19;
+  --card: rgba(255, 255, 255, 0.86);
+  --card-border: rgba(15, 27, 25, 0.12);
+}
+
+.landing-shell {
+  font-family: 'Work Sans', system-ui, sans-serif;
+}
+
+.landing-shell {
+  background: var(--mist);
+  color: var(--ink);
+}
+
+.landing-hero {
+  position: relative;
+  min-height: 105vh;
+  padding: 48px clamp(20px, 4vw, 80px) 180px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: 48px;
+}
+
+.landing-hero-bg {
+  position: absolute;
+  inset: 0;
+  transform: scale(1.12);
+  background-image:
+    linear-gradient(180deg, rgba(255,255,255,0.85), rgba(255,255,255,0.25)),
+    radial-gradient(circle at 10% 20%, rgba(58, 119, 92, 0.35), transparent 55%),
+    radial-gradient(circle at 80% 10%, rgba(230, 194, 122, 0.35), transparent 60%),
+    linear-gradient(180deg, rgba(255,255,255,0.2), rgba(12,31,28,0.35)),
+    url("/images/forest-canopy.jpg");
+  background-size: cover;
+  background-position: center 12%;
+  filter: saturate(1.1);
+  z-index: 0;
+}
+
+.landing-topbar,
+.landing-intro,
+.landing-body {
+  position: relative;
+  z-index: 1;
+}
+
+.landing-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 10px 16px;
+  background: rgba(255, 255, 255, 0.78);
+  border-radius: 999px;
+  box-shadow: 0 8px 30px rgba(15, 27, 25, 0.08);
+}
+
+.brand {
+  display: flex;
+  align-items: baseline;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.brand-mark {
+  font-family: 'Fraunces', serif;
+  font-size: 1.1rem;
+}
+
+.landing-nav {
+  display: flex;
+  gap: 14px;
+}
+
+.nav-link {
+  background: transparent;
+  border: none;
+  color: rgba(15, 27, 25, 0.7);
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+
+.landing-actions {
+  display: flex;
+  gap: 10px;
+}
+
+.landing-actions .btn {
+  text-decoration: none;
+}
+
+.about-section {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding-top: 16px;
+  max-width: 820px;
+}
+
+.about-copy {
+  margin: 0;
+  font-size: 1rem;
+  color: rgba(15, 27, 25, 0.72);
+  line-height: 1.7;
+}
+
+.landing-footer {
+  position: relative;
+  margin-top: 48px;
+  padding: 140px 0 120px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  text-align: center;
+  color: rgba(15, 27, 25, 0.35);
+  overflow: hidden;
+  min-height: 420px;
+}
+
+.landing-footer::before {
+  content: 'INTERACT STUDIO';
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: 'Fraunces', serif;
+  font-size: clamp(3rem, 14vw, 10rem);
+  letter-spacing: 0.18em;
+  color: rgba(15, 27, 25, 0.06);
+  pointer-events: none;
+}
+
+.landing-footer-title {
+  font-family: 'Fraunces', serif;
+  font-size: 1.1rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+.landing-footer-tagline {
+  font-size: 0.95rem;
+  color: rgba(15, 27, 25, 0.65);
+}
+
+.landing-footer-line {
+  width: min(720px, 90%);
+  height: 1px;
+  background: rgba(15, 27, 25, 0.1);
+  margin-top: 18px;
+}
+
+.landing-footer-links {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 0.9rem;
+  color: rgba(15, 27, 25, 0.6);
+}
+
+.landing-footer-links a {
+  color: rgba(15, 27, 25, 0.7);
+  text-decoration: none;
+  font-weight: 600;
+}
+
+.landing-footer-links a:hover {
+  color: rgba(15, 27, 25, 0.95);
+}
+
+.footer-sep {
+  opacity: 0.5;
+}
+
+.footer-muted {
+  opacity: 0.6;
+  pointer-events: none;
+}
+
+.landing-intro {
+  max-width: 720px;
+  padding: 18px 6px 0;
+}
+
+.hero-title {
+  font-family: 'Fraunces', serif;
+  font-size: clamp(3rem, 7vw, 6rem);
+  margin: 6px 0 14px;
+  color: var(--forest);
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  text-shadow: 0 4px 24px rgba(255, 255, 255, 0.55);
+}
+
+.eyebrow {
+  margin: 0;
+  text-transform: uppercase;
+  letter-spacing: 0.4em;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: rgba(15, 27, 25, 0.7);
+}
+
+.landing-subtitle {
+  margin: 0;
+  color: rgba(15, 27, 25, 0.8);
+  font-size: 1.05rem;
+  max-width: 55ch;
+}
+
+.landing-body {
+  padding: 80px clamp(20px, 4vw, 80px) 180px;
+  display: flex;
+  flex-direction: column;
+  gap: 40px;
+}
+
+
+.landing-keys {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 20px 22px;
+  border-radius: 18px;
+  border: 1px solid var(--card-border);
+  background: var(--card);
+  backdrop-filter: blur(6px);
+  max-width: 720px;
+}
+
+.landing-keys-title {
+  font-size: 0.85rem;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: rgba(15, 27, 25, 0.55);
+}
+
+.landing-keys-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+}
+
+.landing-keys-grid label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 0.8rem;
+  color: rgba(15, 27, 25, 0.8);
+}
+
+.landing-keys-grid input {
+  border-radius: 10px;
+  border: 1px solid var(--card-border);
+  background: rgba(255, 255, 255, 0.7);
+  color: var(--ink);
+  padding: 10px 12px;
+}
+
+.landing-keys-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.landing-keys-status {
+  font-size: 0.8rem;
+  color: rgba(15, 27, 25, 0.65);
+}
+
+.landing-section-header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.landing-section-header h2 {
+  margin: 0 0 6px;
+  font-size: 1.6rem;
+  color: var(--forest);
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+}
+
+.landing-section-header p {
+  margin: 0;
+  color: rgba(15, 27, 25, 0.65);
+}
+
+.link-button {
+  border: none;
+  background: transparent;
+  color: var(--forest-soft);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.card-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 18px;
+}
+
+@media (max-width: 1200px) {
+  .card-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 720px) {
+  .card-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.character-card {
+  border: 1px solid var(--card-border);
+  border-radius: 22px;
+  background: rgba(255, 255, 255, 0.92);
+  overflow: hidden;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  text-align: left;
+  transition: transform 0.25s ease, box-shadow 0.25s ease;
+  cursor: pointer;
+}
+
+.character-card.active,
+.character-card:hover {
+  transform: translateY(-6px);
+  box-shadow: 0 20px 40px rgba(15, 27, 25, 0.15);
+}
+
+.character-card-media {
+  height: 180px;
+  background-size: cover;
+  background-position: center;
+}
+
+.character-card-body {
+  padding: 16px 16px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.character-card-body h3 {
+  margin: 0;
+  font-size: 1.05rem;
+  color: var(--forest);
+}
+
+.character-card-body p {
+  margin: 0;
+  color: rgba(15, 27, 25, 0.7);
+  font-size: 0.85rem;
+}
+
+.card-tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(63, 109, 79, 0.12);
+  color: var(--forest-soft);
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
 }

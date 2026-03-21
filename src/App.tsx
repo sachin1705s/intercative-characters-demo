@@ -4,11 +4,11 @@ import { SpeedInsights } from '@vercel/speed-insights/react';
 import type { ConnectionStatus } from '@odysseyml/odyssey';
 import { FilesetResolver, ObjectDetector } from '@mediapipe/tasks-vision';
 import { AtomsClient } from 'atoms-client-sdk';
-import slidesData from './data/slides.json';
+import charactersData from './data/characters.json';
 import { OdysseyService, loadImageFile, type StreamState } from './lib/odyssey';
 import './App.css';
 
-interface Slide {
+interface Character {
   id: string;
   title: string;
   subtitle: string;
@@ -16,14 +16,6 @@ interface Slide {
   image: string;
   prompt: string;
   cta: string;
-}
-
-interface Story {
-  id: string;
-  title: string;
-  subtitle: string;
-  poster: string;
-  slides: Slide[];
 }
 
 type GestureLabel = 'hello' | 'thumbs_up' | 'victory' | 'namaste';
@@ -49,7 +41,7 @@ type SpeechRecognitionLike = {
   stop: () => void;
 };
 
-const stories = (slidesData as { stories: Story[] }).stories;
+const characters = (charactersData as { characters: Character[] }).characters;
 const GESTURE_DELAY_MS = 600;
 const GEMINI_GESTURE_COOLDOWN_MS = 1700;
 const VISION_POLL_MS = 1700;
@@ -74,8 +66,7 @@ function getSpeechRecognition(): (new () => SpeechRecognitionLike) | null {
 function App() {
   const [apiKey, setApiKey] = useState<string | undefined>(undefined);
   const [showLanding, setShowLanding] = useState(true);
-  const [selectedStory, setSelectedStory] = useState<string | null>(stories[0]?.id ?? null);
-  const [index, setIndex] = useState(0);
+  const [selectedCharacterId, setSelectedCharacterId] = useState<string | null>(characters[0]?.id ?? null);
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>('disconnected');
   const [streamState, setStreamState] = useState<StreamState>('idle');
   const [error, setError] = useState<string | null>(null);
@@ -147,35 +138,34 @@ function App() {
   const voiceAwaitTimerRef = useRef<number | null>(null);
   const ttsAudioCtxRef = useRef<AudioContext | null>(null);
   const [clonedVoiceId, setClonedVoiceId] = useState<string | null>(null);
+  const [apiKeyForm, setApiKeyForm] = useState({ odyssey: '', gemini: '', smallest: '' });
+  const [apiKeyStatus, setApiKeyStatus] = useState<string | null>(null);
+  const [apiKeySaving, setApiKeySaving] = useState(false);
   const [voiceCloneStatus, setVoiceCloneStatus] = useState<'idle' | 'recording' | 'uploading' | 'ready' | 'error'>('idle');
   const [voiceCloneError, setVoiceCloneError] = useState<string | null>(null);
   const [voiceCloneDuration, setVoiceCloneDuration] = useState(0);
   const [showVoiceClone, setShowVoiceClone] = useState(false);
+  const [streamNeedsGesture, setStreamNeedsGesture] = useState(false);
   const voiceCloneRecorderRef = useRef<MediaRecorder | null>(null);
   const voiceCloneStreamRef = useRef<MediaStream | null>(null);
   const voiceCloneChunksRef = useRef<Blob[]>([]);
   const voiceCloneStartRef = useRef<number>(0);
   const voiceCloneDurationTimerRef = useRef<number | null>(null);
 
-  const activeStory = stories.find((story) => story.id === selectedStory) ?? stories[0];
-  const slides = activeStory?.slides ?? [];
-  const slide = slides[index];
-  const slideImageUrl = encodeURI(slide.image);
-  const landingPosterUrl = encodeURI(activeStory?.poster ?? '/images/output (1).png');
-  const slideCount = slides.length;
-  const isUploadSlide = slide.id === 'make-your-magic';
-  const isCharacterSlide = activeStory?.id === 'characters';
+  const selectedCharacter = characters.find((item) => item.id === selectedCharacterId) ?? characters[0];
+  const slide = selectedCharacter;
+  const slideImageUrl = encodeURI(slide?.image ?? '');
+  const landingPosterUrl = encodeURI(characters[0]?.image ?? '/images/output (1).png');
+  const isUploadSlide = false;
+  const isCharacterSlide = true;
   const VOICE_AGENT_ID_BY_SLIDE: Record<string, { id: string; label: string }> = {
-    'characters-07': { id: '69b32b5ab57a92ad341f350d', label: 'Circus Lion' },
-    'characters-02': { id: '', label: 'Albert Einstein' },
-    'characters-sudharshan': { id: '', label: 'Sudharshan Kamath' },
-    'characters-farza': { id: '', label: 'Farza' },
-    'characters-dan-shipper': { id: '', label: 'Dan Shipper' }
+    'circus-lion': { id: '', label: 'Circus Lion' },
+    'einstein': { id: '', label: 'Albert Einstein' }
   };
-  const activeVoiceAgent = VOICE_AGENT_ID_BY_SLIDE[slide.id];
+  const activeVoiceAgent = slide ? VOICE_AGENT_ID_BY_SLIDE[slide.id] : null;
   const isVoiceAgentSlide = Boolean(activeVoiceAgent);
-  const activeCharacterName = isCharacterSlide ? slide.title : 'Character';
-  const activeCharacterHistory = characterHistory[slide.id] ?? [];
+  const activeCharacterName = slide?.title ?? 'Character';
+  const activeCharacterHistory = slide ? characterHistory[slide.id] ?? [] : [];
   const slideCtaRef = useRef('');
 
 
@@ -187,6 +177,39 @@ function App() {
       })
       .catch(() => {});
   }, []);
+
+  const saveApiKeys = async () => {
+    if (apiKeySaving) return;
+    setApiKeyStatus(null);
+    setApiKeySaving(true);
+    try {
+      const payload = {
+        odysseyApiKey: apiKeyForm.odyssey.trim(),
+        geminiApiKey: apiKeyForm.gemini.trim(),
+        smallestApiKey: apiKeyForm.smallest.trim()
+      };
+      const res = await fetch('/api/config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      if (!res.ok) {
+        const message = await res.text();
+        setApiKeyStatus(message || 'Failed to save keys.');
+        return;
+      }
+      setApiKeyStatus('Saved. Restarting stream may be required.');
+      const tokenRes = await fetch('/api/odyssey/token');
+      if (tokenRes.ok) {
+        const data = await tokenRes.json();
+        if (data?.apiKey) setApiKey(data.apiKey);
+      }
+    } catch (err) {
+      setApiKeyStatus(err instanceof Error ? err.message : String(err));
+    } finally {
+      setApiKeySaving(false);
+    }
+  };
 
   useEffect(() => {
     isStreamingReadyRef.current = isStreamingReady;
@@ -225,8 +248,8 @@ function App() {
   }, [voiceStatus, isVoiceAgentSlide]);
 
   useEffect(() => {
-    slideCtaRef.current = slide.cta;
-  }, [slide.cta]);
+    slideCtaRef.current = slide?.cta || 'Animate it';
+  }, [slide?.cta]);
 
 
   useEffect(() => {
@@ -246,7 +269,12 @@ function App() {
           const attach = () => {
             if (videoRef.current) {
               videoRef.current.srcObject = stream;
-              videoRef.current.play().catch((e) => console.warn('[odyssey] video.play failed:', e));
+              videoRef.current.play()
+                .then(() => setStreamNeedsGesture(false))
+                .catch((e) => {
+                  console.warn('[odyssey] video.play failed:', e);
+                  setStreamNeedsGesture(true);
+                });
             } else {
               setTimeout(attach, 100);
             }
@@ -365,11 +393,11 @@ function App() {
       setIsStreamingReady(false);
       setError(err instanceof Error ? err.message : String(err));
     });
-  }, [connectionStatus, showLanding, index, slide.id, slide.image, slide.prompt, isUploadSlide]);
+  }, [connectionStatus, showLanding, selectedCharacterId, slide.id, slide.image, slide.prompt, isUploadSlide]);
 
 
   useEffect(() => {
-    const preload = async (target: Slide) => {
+    const preload = async (target: Character) => {
       if (imageCacheRef.current.has(target.id)) {
         return;
       }
@@ -380,12 +408,10 @@ function App() {
         // ignore preload errors
       }
     };
-    preload(slide);
-    const nextSlide = slides[(index + 1) % slideCount];
-    if (nextSlide) {
-      preload(nextSlide);
+    if (slide) {
+      preload(slide);
     }
-  }, [index, slide, slideCount, slideImageUrl]);
+  }, [slide, slideImageUrl]);
 
   useEffect(() => {
     return () => {
@@ -466,12 +492,15 @@ function App() {
     };
   }, []);
 
-  const handlePrev = () => {
-    setIndex((prev) => (prev - 1 + slideCount) % slideCount);
-  };
-
-  const handleNext = () => {
-    setIndex((prev) => (prev + 1) % slideCount);
+  const handleStartStreamPlayback = async () => {
+    if (!videoRef.current) return;
+    try {
+      await videoRef.current.play();
+      setStreamNeedsGesture(false);
+    } catch (err) {
+      console.warn('[odyssey] manual play failed:', err);
+      setStreamNeedsGesture(true);
+    }
   };
 
   const handleInteract = (promptOverride?: string) => {
@@ -716,7 +745,23 @@ function App() {
     characterRecorderRef.current?.stop();
   };
 
-  const playCharacterTTS = async (text: string) => {
+  const VOICE_BY_SLIDE_ID: Record<string, string> = {
+    'grandpa-turtle': 'voice_sy0WTBbVLn',
+    'cleopetra': 'voice_77fTvcwjpf',
+    'bear': 'voice_6qrOrtdaCH',
+    'alexander': 'voice_xOnqX9wVFg',
+    'circus-lion': 'voice_ubOexwyolA',
+    'einstein': 'voice_wONXjF0SK8',
+    'steve-jobs': 'voice_cD7m0xgjFA',
+    'squirral': 'voice_ccZuktBgEo',
+    'tesla': 'voice_E7z5PM4RBT',
+    'da-vinci': 'voice_JwqjHuo5ll'
+  };
+
+  const playCharacterTTS = async (text: string, slideId?: string) => {
+    if (!ttsAudioCtxRef.current) {
+      ttsAudioCtxRef.current = new AudioContext();
+    }
     const ctx = ttsAudioCtxRef.current;
     console.log('[tts] playCharacterTTS called, text:', text.slice(0, 80));
     console.log('[tts] AudioContext state:', ctx ? ctx.state : 'null (no ctx)');
@@ -724,10 +769,12 @@ function App() {
     try {
       await ctx.resume();
       console.log('[tts] AudioContext resumed, state:', ctx.state);
+      const slideVoiceId = slideId ? VOICE_BY_SLIDE_ID[slideId] : '';
+      const resolvedVoiceId = slideVoiceId || clonedVoiceId;
       const ttsRes = await fetch('/api/character/tts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text, character: activeCharacterName, ...(clonedVoiceId ? { voiceId: clonedVoiceId } : {}) })
+        body: JSON.stringify({ text, character: activeCharacterName, ...(resolvedVoiceId ? { voiceId: resolvedVoiceId } : {}) })
       });
       console.log('[tts] server response status:', ttsRes.status, ttsRes.statusText);
       console.log('[tts] content-type:', ttsRes.headers.get('content-type'));
@@ -742,15 +789,32 @@ function App() {
         const text = new TextDecoder().decode(arrayBuffer);
         console.warn('[tts] suspiciously small buffer — raw content:', text);
       }
-      const decoded = await ctx.decodeAudioData(arrayBuffer);
-      console.log('[tts] decoded audio duration:', decoded.duration.toFixed(2), 's');
-      const source = ctx.createBufferSource();
-      source.buffer = decoded;
-      source.connect(ctx.destination);
-      source.start();
-      console.log('[tts] audio playback started');
+      try {
+        const decoded = await ctx.decodeAudioData(arrayBuffer);
+        console.log('[tts] decoded audio duration:', decoded.duration.toFixed(2), 's');
+        const source = ctx.createBufferSource();
+        source.buffer = decoded;
+        source.connect(ctx.destination);
+        source.start();
+        console.log('[tts] audio playback started');
+      } catch (err) {
+        console.warn('[tts] decodeAudioData failed, falling back to HTMLAudioElement', err);
+        const mime = ttsRes.headers.get('content-type') || 'audio/wav';
+        const blob = new Blob([arrayBuffer], { type: mime });
+        const url = URL.createObjectURL(blob);
+        const audio = new Audio(url);
+        audio.onended = () => URL.revokeObjectURL(url);
+        try {
+          await audio.play();
+          console.log('[tts] fallback audio playback started');
+        } catch (playErr) {
+          console.error('[tts] fallback audio play failed', playErr);
+          setCharacterError('Audio playback was blocked. Click the page once, then try again.');
+        }
+      }
     } catch (err) {
       console.error('[tts] error', err);
+      setCharacterError('TTS failed to play audio. Check the console for details.');
     }
   };
 
@@ -789,7 +853,7 @@ function App() {
     const objectPrompt = objects.length ? ` Include ${objects.join(', ')} in the scene.` : '';
     const streamPrompt = `${action}.${objectPrompt}`.trim();
     handleInteractRef.current(streamPrompt);
-    playCharacterTTS(trimmedReply);
+    playCharacterTTS(trimmedReply, slideId);
   };
 
   const startCharacterRecording = async () => {
@@ -1485,65 +1549,140 @@ function App() {
     }
   };
 
-  const handleSelectStory = (id: string) => {
-    setSelectedStory(id);
-  };
-
-  const handleStartStory = () => {
-    if (!selectedStory && stories[0]?.id) {
-      setSelectedStory(stories[0].id);
-    }
-    setIndex(0);
+  const handleSelectCharacter = (id: string) => {
+    setSelectedCharacterId(id);
     setShowLanding(false);
   };
 
   if (showLanding) {
     return (
-      <div className="app">
-        <div className="video-layer">
-          <div
-            className="background-fallback landing-bg"
-            style={{ backgroundImage: `url("${landingPosterUrl}")` }}
-            aria-hidden
-          />
-          <div className="video-overlay" />
-        </div>
-        <div className="landing">
-          <div className="landing-header">
-            <p className="eyebrow">Story Archives</p>
-            <h1 className="app-title">Live Through Stories</h1>
+      <div className="app landing-shell">
+        <div className="landing-hero">
+          <div className="landing-hero-bg" aria-hidden />
+          <header className="landing-topbar">
+            <div className="brand">
+              <span className="brand-mark">Interact Studio</span>
+            </div>
+            <div className="landing-actions">
+              <button className="btn ghost" onClick={() => { setSelectedCharacterId(null); setShowLanding(false); }}>About us</button>
+              <a className="btn primary" href="mailto:sachin.37.73.17@gmail.com">Get in touch</a>
+            </div>
+          </header>
+
+          <section className="landing-intro">
+            <p className="eyebrow">Interactive media</p>
+            <h1 className="hero-title">Talk to characters</h1>
             <p className="landing-subtitle">
-              Interactive storylines, cinematic scenes, and live reactions. Step into a tale and shape what happens next.
+              Watch the world respond in real time.
             </p>
-            <div className="landing-search">
-              <div className="search-line" />
-              <span className="search-label">Interactive storylines</span>
+          </section>
+        </div>
+
+        <main className="landing-body">
+          <section className="landing-keys">
+            <div className="landing-keys-title">API Keys (dev only)</div>
+            <div className="landing-keys-grid">
+              <label>
+                <span>Odyssey API key</span>
+                <input
+                  type="password"
+                  placeholder="ody_..."
+                  value={apiKeyForm.odyssey}
+                  onChange={(e) => setApiKeyForm((prev) => ({ ...prev, odyssey: e.target.value }))}
+                />
+              </label>
+              <label>
+                <span>Gemini API key</span>
+                <input
+                  type="password"
+                  placeholder="AIza..."
+                  value={apiKeyForm.gemini}
+                  onChange={(e) => setApiKeyForm((prev) => ({ ...prev, gemini: e.target.value }))}
+                />
+              </label>
+              <label>
+                <span>Smallest API key</span>
+                <input
+                  type="password"
+                  placeholder="sk_..."
+                  value={apiKeyForm.smallest}
+                  onChange={(e) => setApiKeyForm((prev) => ({ ...prev, smallest: e.target.value }))}
+                />
+              </label>
             </div>
-          </div>
-          <div className="poster-grid">
-            {stories.map((story) => (
-              <button
-                key={story.id}
-                className={`poster-card ${selectedStory === story.id ? 'active' : ''}`}
-                onClick={() => handleSelectStory(story.id)}
-              >
-                <img src={encodeURI(story.poster)} alt={`${story.title} poster`} />
-                <div className="poster-info">
-                  <span>{story.title}</span>
-                </div>
+            <div className="landing-keys-actions">
+              <button className="btn primary" onClick={saveApiKeys} disabled={apiKeySaving}>
+                {apiKeySaving ? 'Saving...' : 'Save keys'}
               </button>
-            ))}
-          </div>
-          {selectedStory ? (
-            <div className="landing-cta">
-              <button className="btn primary" onClick={handleStartStory}>
-                Start Story
-              </button>
+              {apiKeyStatus ? <span className="landing-keys-status">{apiKeyStatus}</span> : null}
             </div>
-          ) : null}
-          <div className="landing-footer">
-            <span className="search-label">Powered by Odyssey</span>
-          </div>
+          </section>
+
+          <section className="landing-section">
+            <div className="landing-section-header">
+              <div>
+                <h2>Characters</h2>
+              </div>
+            </div>
+            <div className="card-grid">
+              {characters.map((character) => (
+                <button
+                  key={character.id}
+                  className={`character-card ${selectedCharacterId === character.id ? 'active' : ''}`}
+                  onClick={() => handleSelectCharacter(character.id)}
+                >
+                  <div
+                    className="character-card-media"
+                    style={{ backgroundImage: `url("${encodeURI(character.image)}")` }}
+                    aria-hidden
+                  />
+                  <div className="character-card-body">
+                    <span className="card-tag">Live</span>
+                    <h3>{character.title}</h3>
+                    <p>{character.body}</p>
+                  </div>
+                </button>
+              ))}
+            </div>
+          </section>
+          <footer className="landing-footer">
+            <div className="landing-footer-title">Interact Studio</div>
+            <div className="landing-footer-links">
+              <span>Join our community:</span>
+              <a href="https://discord.gg/bSx4Vhyc" target="_blank" rel="noreferrer">Discord</a>
+              <span className="footer-sep">|</span>
+              <a href="#" className="footer-muted">X</a>
+            </div>
+            <div className="landing-footer-line" />
+          </footer>
+        </main>
+      </div>
+    );
+  }
+
+  if (!showLanding && !selectedCharacterId) {
+    return (
+      <div className="app landing-shell about-page">
+        <div className="landing-hero">
+          <div className="landing-hero-bg" aria-hidden />
+          <header className="landing-topbar">
+            <div className="brand">
+              <span className="brand-mark">Interact Studio</span>
+            </div>
+            <div className="landing-actions">
+              <button className="btn ghost" onClick={() => setShowLanding(true)}>Back</button>
+              <a className="btn primary" href="mailto:sachin.37.73.17@gmail.com">Get in touch</a>
+            </div>
+          </header>
+          <section className="landing-intro">
+            <p className="eyebrow">About us</p>
+            <h1 className="hero-title">We build worlds that listen.</h1>
+            <p className="landing-subtitle">
+              Interact Studio is an experiment in live storytelling. We blend world models,
+              generative media, and voice to create characters that feel present, responsive,
+              and emotionally expressive. Our goal is simple: make conversation move the world.
+            </p>
+          </section>
         </div>
       </div>
     );
@@ -1640,9 +1779,6 @@ function App() {
 
         <footer className="story-bar">
           <div className="story-text">
-            <span className="story-index">
-              {String(index + 1).padStart(2, '0')} / {String(slideCount).padStart(2, '0')}
-            </span>
             <p>{slide.body}</p>
             {speechText ? <div className="speech-preview">Heard: “{speechText}”</div> : null}
             {speechError ? <div className="speech-preview speech-error">{speechError}</div> : null}
@@ -1669,6 +1805,11 @@ function App() {
             {error ? <div className="error-box">{error}</div> : null}
           </div>
           <div className="story-actions">
+            {streamNeedsGesture ? (
+              <button className="btn accent" onClick={handleStartStreamPlayback}>
+                Start stream
+              </button>
+            ) : null}
             {isCharacterSlide ? (
               <button
                 className="btn accent"
@@ -1704,12 +1845,6 @@ function App() {
                 {isRecording || isListeningBrowser ? 'Stop' : isTranscribing ? '...' : 'Speak'}
               </button>
             </div>
-            <button className="btn ghost" onClick={handlePrev}>
-              Back
-            </button>
-          <button className="btn primary" onClick={handleNext}>
-            Next
-          </button>
         </div>
       </footer>
       </div>
