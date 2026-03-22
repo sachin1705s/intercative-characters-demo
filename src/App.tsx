@@ -101,6 +101,13 @@ function App() {
   const [lastVoiceActionAt, setLastVoiceActionAt] = useState<number | null>(null);
   const [lastVoiceSource, setLastVoiceSource] = useState<string | null>(null);
   const [lastVoiceHint, setLastVoiceHint] = useState<string | null>(null);
+  void voiceError;
+  void lastVoiceIntent;
+  void lastVoiceEvent;
+  void lastVoicePrompt;
+  void lastVoiceActionAt;
+  void lastVoiceSource;
+  void lastVoiceHint;
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const mediaStreamRef = useRef<MediaStream | null>(null);
   const odysseyStreamRef = useRef<MediaStream | null>(null);
@@ -155,7 +162,6 @@ function App() {
   const selectedCharacter = characters.find((item) => item.id === selectedCharacterId) ?? characters[0];
   const slide = selectedCharacter;
   const slideImageUrl = encodeURI(slide?.image ?? '');
-  const landingPosterUrl = encodeURI(characters[0]?.image ?? '/images/output (1).png');
   const isUploadSlide = false;
   const isCharacterSlide = true;
   const VOICE_AGENT_ID_BY_SLIDE: Record<string, { id: string; label: string }> = {
@@ -379,7 +385,9 @@ function App() {
         return;
       }
       const streamOptions = { prompt: slide.prompt, image: file, portrait: slide.id === 'characters-sudharshan' };
-      retryStreamRef.current = () => service.startStream(streamOptions);
+      retryStreamRef.current = async () => {
+        await service.startStream(streamOptions);
+      };
       console.log('[odyssey] calling startStream — slide:', slide.id, '| prompt:', slide.prompt?.slice(0, 60));
       await service.startStream(streamOptions);
       console.log('[odyssey] startStream resolved');
@@ -722,7 +730,7 @@ function App() {
         throw new Error('Missing access token or host.');
       }
       const client = getAtomsClient();
-      await client.startSession({ accessToken, mode: 'voice', host, sampleRate: 48000 });
+      await client.startSession({ accessToken, mode: 'webcall', host, sampleRate: 48000 });
       await client.startAudioPlayback();
       setVoiceStatus('connected');
       voiceAwaitTimerRef.current = window.setTimeout(() => {
@@ -737,6 +745,7 @@ function App() {
       setVoiceStatus('error');
     }
   };
+  void startVoiceAgent;
 
   const stopCharacterRecording = () => {
     if (!isCharacterRecording) {
