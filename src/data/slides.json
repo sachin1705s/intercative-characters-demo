@@ -3,13 +3,31 @@
     {
       "id": "characters",
       "title": "Characters",
-      "subtitle": "4 scenes • Cast",
+      "subtitle": "7 scenes • Cast",
       "poster": "/images/storybook-07.png",
       "slides": [
         {
+          "id": "characters-varun",
+          "title": "Varun Mayya",
+          "subtitle": "Character 01",
+          "body": "Varun Mayya — entrepreneur and educator, pushing internet-first careers and AI-native businesses.",
+          "image": "/images/varun mayya.png",
+          "prompt": "Animate it",
+          "cta": "Animate it"
+        },
+        {
+          "id": "characters-oliver",
+          "title": "Oliver Cameron",
+          "subtitle": "Character 02",
+          "body": "Oliver Cameron, founder of Odyssey, exploring how stories come alive.",
+          "image": "/images/oliver cameroon.png",
+          "prompt": "Animate it",
+          "cta": "Animate it"
+        },
+        {
           "id": "characters-07",
           "title": "Circus Lion",
-          "subtitle": "Character 01",
+          "subtitle": "Character 03",
           "body": "A cheerful circus lion grins, ready for the big show.",
           "image": "/images/storybook-07.png",
           "prompt": "Animate it",
@@ -18,7 +36,7 @@
         {
           "id": "characters-02",
           "title": "Albert Einstein",
-          "subtitle": "Character 02",
+          "subtitle": "Character 04",
           "body": "Albert Einstein appears with curious eyes and a mind full of ideas.",
           "image": "/images/storybook-02.png",
           "prompt": "Animate it",
@@ -27,7 +45,7 @@
         {
           "id": "characters-sudharshan",
           "title": "Sudharshan Kamath",
-          "subtitle": "Character 03",
+          "subtitle": "Character 05",
           "body": "Sudharshan Kamath, co-founder of Smallest.ai, building the future of voice AI.",
           "image": "/images/storybook-08.png",
           "prompt": "Animate it",
@@ -36,7 +54,7 @@
         {
           "id": "characters-dan-shipper",
           "title": "Dan Shipper",
-          "subtitle": "Character 05",
+          "subtitle": "Character 06",
           "body": "Dan Shipper, co-founder of Every — writer, builder, and thinker on AI and the future of work.",
           "image": "/images/Dan Shipper.png",
           "prompt": "Animate it",
@@ -45,7 +63,7 @@
         {
           "id": "characters-farza",
           "title": "Farza",
-          "subtitle": "Character 04",
+          "subtitle": "Character 07",
           "body": "Farza Majeed — founder of Buildspace, obsessed with helping builders ship their ideas.",
           "image": "/images/Farza.png",
           "prompt": "Animate it",
