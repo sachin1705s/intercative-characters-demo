@@ -719,18 +719,7 @@ function App() {
     characterRecorderRef.current?.stop();
   };
 
-  const VOICE_BY_SLIDE_ID: Record<string, string> = {
-    'grandpa-turtle': 'voice_sy0WTBbVLn',
-    'cleopetra': 'voice_77fTvcwjpf',
-    'bear': 'voice_6qrOrtdaCH',
-    'alexander': 'voice_xOnqX9wVFg',
-    'circus-lion': 'voice_ubOexwyolA',
-    'einstein': 'voice_wONXjF0SK8',
-    'steve-jobs': 'voice_cD7m0xgjFA',
-    'squirral': 'voice_ccZuktBgEo',
-    'tesla': 'voice_E7z5PM4RBT',
-    'da-vinci': 'voice_JwqjHuo5ll'
-  };
+  const VOICE_BY_SLIDE_ID: Record<string, string> = {};
 
   const playCharacterTTS = async (text: string, slideId?: string) => {
     if (!ttsAudioCtxRef.current) {
