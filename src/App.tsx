@@ -145,9 +145,6 @@ function App() {
   const voiceAwaitTimerRef = useRef<number | null>(null);
   const ttsAudioCtxRef = useRef<AudioContext | null>(null);
   const [clonedVoiceId, setClonedVoiceId] = useState<string | null>(null);
-  const [apiKeyForm, setApiKeyForm] = useState({ odyssey: '', gemini: '', smallest: '' });
-  const [apiKeyStatus, setApiKeyStatus] = useState<string | null>(null);
-  const [apiKeySaving, setApiKeySaving] = useState(false);
   const [voiceCloneStatus, setVoiceCloneStatus] = useState<'idle' | 'recording' | 'uploading' | 'ready' | 'error'>('idle');
   const [voiceCloneError, setVoiceCloneError] = useState<string | null>(null);
   const [voiceCloneDuration, setVoiceCloneDuration] = useState(0);
@@ -184,38 +181,6 @@ function App() {
       .catch(() => {});
   }, []);
 
-  const saveApiKeys = async () => {
-    if (apiKeySaving) return;
-    setApiKeyStatus(null);
-    setApiKeySaving(true);
-    try {
-      const payload = {
-        odysseyApiKey: apiKeyForm.odyssey.trim(),
-        geminiApiKey: apiKeyForm.gemini.trim(),
-        smallestApiKey: apiKeyForm.smallest.trim()
-      };
-      const res = await fetch('/api/config', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      });
-      if (!res.ok) {
-        const message = await res.text();
-        setApiKeyStatus(message || 'Failed to save keys.');
-        return;
-      }
-      setApiKeyStatus('Saved. Restarting stream may be required.');
-      const tokenRes = await fetch('/api/odyssey/token');
-      if (tokenRes.ok) {
-        const data = await tokenRes.json();
-        if (data?.apiKey) setApiKey(data.apiKey);
-      }
-    } catch (err) {
-      setApiKeyStatus(err instanceof Error ? err.message : String(err));
-    } finally {
-      setApiKeySaving(false);
-    }
-  };
 
   useEffect(() => {
     isStreamingReadyRef.current = isStreamingReady;
@@ -1588,45 +1553,6 @@ function App() {
         </div>
 
         <main className="landing-body">
-          <section className="landing-keys">
-            <div className="landing-keys-title">API Keys (dev only)</div>
-            <div className="landing-keys-grid">
-              <label>
-                <span>Odyssey API key</span>
-                <input
-                  type="password"
-                  placeholder="ody_..."
-                  value={apiKeyForm.odyssey}
-                  onChange={(e) => setApiKeyForm((prev) => ({ ...prev, odyssey: e.target.value }))}
-                />
-              </label>
-              <label>
-                <span>Gemini API key</span>
-                <input
-                  type="password"
-                  placeholder="AIza..."
-                  value={apiKeyForm.gemini}
-                  onChange={(e) => setApiKeyForm((prev) => ({ ...prev, gemini: e.target.value }))}
-                />
-              </label>
-              <label>
-                <span>Smallest API key</span>
-                <input
-                  type="password"
-                  placeholder="sk_..."
-                  value={apiKeyForm.smallest}
-                  onChange={(e) => setApiKeyForm((prev) => ({ ...prev, smallest: e.target.value }))}
-                />
-              </label>
-            </div>
-            <div className="landing-keys-actions">
-              <button className="btn primary" onClick={saveApiKeys} disabled={apiKeySaving}>
-                {apiKeySaving ? 'Saving...' : 'Save keys'}
-              </button>
-              {apiKeyStatus ? <span className="landing-keys-status">{apiKeyStatus}</span> : null}
-            </div>
-          </section>
-
           <section className="landing-section">
             <div className="landing-section-header">
               <div>
